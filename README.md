@@ -1,6 +1,16 @@
-# 🚀 Naver Real Estate Analysis Bot
+# 🚀 Naver Real Estate Analysis# 네이버 부동산 분석 서비스
 
-네이버 부동산 데이터 분석 및 시각화 도구
+> 🎉 **베타 버전 출시!** - 부동산 투자를 데이터로 시작하세요
+
+[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.50.0-red.svg)](https://streamlit.io/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+**배포 URL**: [https://your-app.streamlit.app](https://streamlit.io/cloud) _(배포 후 업데이트)_
+
+---
+
+## ⚡ 빠른 시작 (베타 테스터)
 
 ## 📊 주요 기능
 
