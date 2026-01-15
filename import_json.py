@@ -1,53 +1,36 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 """
-Tampermonkey에서 내보낸 JSON 파일을 DB로 가져오기
+JSON 파일에서 네이버 부동산 데이터 import
+Tampermonkey 스크립트에서 내보낸 JSON 파일 처리
 """
 
 import json
 import sys
-import os
-from datetime import datetime
+from pathlib import Path
 import pandas as pd
 from src.database import RealEstateDB
+import os # Added for os.path.isdir, os.path.isfile, os.path.join
 
-
-def parse_floor_number(floor_str):
-    """층수 텍스트를 숫자로 변환"""
-    if not floor_str or floor_str == '-':
+def parse_floor_str_to_num(floor_str):
+    """층 문자열에서 숫자 추출"""
+    if not floor_str:
         return 0
-    
-    import re
-    match = re.search(r'(\d+)', floor_str)
-    if match:
-        return int(match.group(1))
-    return 0
+    if '고' in floor_str:
+        return 15
+    elif '중' in floor_str:
+        return 9
+    elif floor_str.isdigit():
+        return int(floor_str)
+    else:
+        return 5 # Default for '저' or other non-specific floors
 
-
-def import_json_file(json_file_path, db_path="data/real_estate.db"):
+def import_complex_data(complex_data, db):
     """
-    Tampermonkey에서 내보낸 JSON 파일을 데이터베이스로 가져오기
-    
-    Args:
-        json_file_path: JSON 파일 경로
-        db_path: 데이터베이스 파일 경로
+    단일 단지의 데이터를 파싱하고 데이터베이스에 저장합니다.
     """
-    
-    # JSON 파일 읽기
-    print(f"📂 JSON 파일 읽는 중: {json_file_path}")
-    try:
-        with open(json_file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-    except FileNotFoundError:
-        print(f"❌ 파일을 찾을 수 없습니다: {json_file_path}")
-        return False
-    except json.JSONDecodeError as e:
-        print(f"❌ JSON 파싱 오류: {e}")
-        return False
-    
-    # 데이터베이스 연결
-    db = RealEstateDB(db_path)
-    
     # 메타데이터 추출
-    metadata = data.get('metadata', {})
+    metadata = complex_data.get('metadata', {})
     complex_no = metadata.get('complex_no', 'unknown')
     complex_name = metadata.get('complex_name', 'Unknown')
     address = metadata.get('address', '')
@@ -72,11 +55,11 @@ def import_json_file(json_file_path, db_path="data/real_estate.db"):
     print(f"✓ 단지 정보 저장 완료")
     
     # 매물 데이터 변환
-    listings = data.get('listings', [])
+    listings = complex_data.get('listings', [])
     
     if not listings:
         print("⚠ 매물 데이터가 없습니다.")
-        return False
+        return 0
     
     sale_listings = []
     lease_listings = []

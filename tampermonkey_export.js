@@ -612,11 +612,12 @@ function addObserverIfDesiredNodeAvailable() {
 addObserverIfDesiredNodeAvailable();
 
 // ========================================
-// JSON 내보내기 기능 추가
+// JSON 내보내기 기능 개선 - LocalStorage 활용
 // ========================================
 
-function exportComplexToJSON() {
-    console.log('JSON 내보내기 시작...');
+// LocalStorage에 현재 아파트 데이터 저장
+function saveToLocalStorage() {
+    console.log('LocalStorage에 데이터 저장 중...');
 
     const complexName = document.querySelector("#complexTitle") ?
         document.querySelector("#complexTitle").innerText : "Unknown";
@@ -637,7 +638,7 @@ function exportComplexToJSON() {
 
     const priceData = getPrice_WeolbuStandard();
 
-    const exportData = {
+    const complexData = {
         metadata: {
             complex_no: complexNo,
             complex_name: complexName,
@@ -649,91 +650,309 @@ function exportComplexToJSON() {
         listings: []
     };
 
-    for (let areaType in priceData) {
-        const item = priceData[areaType];
+    // 면적별 가격 데이터 변환
+    for (const areaKey in priceData) {
+        const data = priceData[areaKey];
+        if (!data || !data.area) continue;
 
-        if (item['매매'] || item['전세']) {
-            const areaMatch = areaType.match(/(\d+\.?\d*)m/);
-            const exclusiveArea = areaMatch ? parseFloat(areaMatch[1]) : 0;
+        complexData.listings.push({
+            area_type: areaKey,
+            exclusive_area: data.area,
+            sale_price: data.price || 0,
+            sale_floor: data.floor || '-',
+            sale_count: data.count || 0,
+            lease_price: data.price_j || 0,
+            lease_floor: data.floor_j || '-',
+            lease_count: data.count_j || 0,
+            gap: data.gap || 0,
+            lease_rate: data.rate || '-'
+        });
+    }
 
-            const listing = {
-                area_type: areaType,
-                exclusive_area: exclusiveArea,
-                sale_price: item['매매'] || 0,
-                sale_floor: item['매매층'] || '',
-                sale_count: item['매매갯수'] || 0,
-                lease_price: item['전세'] || 0,
-                lease_floor: item['전세층'] || '',
-                lease_count: item['전세갯수'] || 0,
-                gap: item['갭'] || 0,
-                lease_rate: item['전세가율'] || ''
-            };
-
-            exportData.listings.push(listing);
+    // 기존 저장된 데이터 가져오기
+    let savedData = [];
+    const storedData = localStorage.getItem('naver_real_estate_data');
+    if (storedData) {
+        try {
+            savedData = JSON.parse(storedData);
+        } catch (e) {
+            console.error('저장된 데이터 파싱 오류:', e);
+            savedData = [];
         }
     }
 
-    const jsonString = JSON.stringify(exportData, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
+    // 중복 확인 (같은 complex_no가 있으면 업데이트)
+    const existingIndex = savedData.findIndex(item =>
+        item.metadata.complex_no === complexNo
+    );
+
+    if (existingIndex >= 0) {
+        savedData[existingIndex] = complexData;
+        alert(`✅ "${complexName}" 데이터 업데이트 완료!\n\n저장된 아파트: ${savedData.length}개`);
+    } else {
+        savedData.push(complexData);
+        alert(`✅ "${complexName}" 데이터 저장 완료!\n\n저장된 아파트: ${savedData.length}개`);
+    }
+
+    // LocalStorage에 저장
+    localStorage.setItem('naver_real_estate_data', JSON.stringify(savedData));
+
+    // 저장 개수 업데이트
+    updateSavedCount();
+}
+
+// 저장된 모든 데이터를 JSON으로 내보내기
+function exportAllData() {
+    const storedData = localStorage.getItem('naver_real_estate_data');
+
+    if (!storedData) {
+        alert('❌ 저장된 데이터가 없습니다.\n먼저 "💾 저장" 버튼으로 아파트 데이터를 저장하세요.');
+        return;
+    }
+
+    let savedData;
+    try {
+        savedData = JSON.parse(storedData);
+    } catch (e) {
+        alert('❌ 저장된 데이터 파싱 오류');
+        return;
+    }
+
+    if (savedData.length === 0) {
+        alert('❌ 저장된 데이터가 없습니다.');
+        return;
+    }
+
+    // 모든 데이터를 하나의 파일로 통합
+    const exportData = {
+        metadata: {
+            export_date: new Date().toISOString(),
+            total_complexes: savedData.length,
+            complex_names: savedData.map(d => d.metadata.complex_name).join(', ')
+        },
+        complexes: savedData
+    };
+
+    // JSON 파일 다운로드
+    const jsonBlob = new Blob([JSON.stringify(exportData, null, 2)], {
+        type: 'application/json'
+    });
+    const url = URL.createObjectURL(jsonBlob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `naver_${complexName.replace(/\s+/g, '_')}_${Date.now()}.json`;
+    a.download = `naver_all_complexes_${Date.now()}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    console.log('JSON 내보내기 완료!', exportData);
-    alert(`✓ ${complexName} 데이터 내보내기 완료!\n면적 타입: ${exportData.listings.length}개`);
+    alert(`✅ 전체 데이터 내보내기 완료!\n\n총 ${savedData.length}개 아파트 데이터`);
 }
 
-function addExportButton() {
-    const existingBtn = document.getElementById('json-export-btn');
-    if (existingBtn) existingBtn.remove();
+// 🆕 저장된 모든 데이터를 서버에 자동 업로드
+function autoUploadToServer() {
+    const storedData = localStorage.getItem('naver_real_estate_data');
 
-    const exportBtn = document.createElement('button');
-    exportBtn.id = 'json-export-btn';
-    exportBtn.innerHTML = '📥 Python으로 내보내기';
-    exportBtn.onclick = exportComplexToJSON;
+    if (!storedData) {
+        alert('⚠️ 저장된 데이터가 없습니다.');
+        return;
+    }
 
-    exportBtn.style.cssText = `
-        position: fixed;
-        top: 70px;
-        right: 10px;
-        z-index: 9999;
-        padding: 12px 20px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        font-size: 14px;
-        font-weight: bold;
-        cursor: pointer;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-        transition: all 0.3s ease;
-    `;
+    let savedData = [];
+    try {
+        savedData = JSON.parse(storedData);
+    } catch (e) {
+        alert('❌ 데이터 파싱 오류');
+        return;
+    }
 
-    exportBtn.onmouseover = function () {
-        this.style.transform = 'translateY(-2px)';
-        this.style.boxShadow = '0 6px 20px rgba(0,0,0,0.3)';
-    };
-    exportBtn.onmouseout = function () {
-        this.style.transform = 'translateY(0)';
-        this.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)';
+    if (savedData.length === 0) {
+        alert('⚠️ 저장된 데이터가 없습니다.');
+        return;
+    }
+
+    // 전체 데이터를 pending_upload에 저장
+    const uploadData = {
+        timestamp: Date.now(),
+        total_count: savedData.length,
+        complexes: savedData
     };
 
-    document.body.appendChild(exportBtn);
+    localStorage.setItem('pending_upload', JSON.stringify(uploadData));
+
+    console.log(`✅ ${savedData.length}개 아파트 데이터 업로드 준비 완료`);
+    alert(`✅ 자동 업로드 준비 완료!\n\n${savedData.length}개 아파트 데이터를 Streamlit 앱에서 확인하세요.`);
 }
 
-setTimeout(addExportButton, 2000);
+// 저장된 데이터 초기화
+function clearSavedData() {
+    if (confirm('⚠️ 저장된 모든 데이터를 삭제하시겠습니까?')) {
+        localStorage.removeItem('naver_real_estate_data');
+        updateSavedCount();
+        alert('✅ 저장된 데이터가 모두 삭제되었습니다.');
+    }
+}
 
+// 저장된 개수 표시 업데이트
+function updateSavedCount() {
+    const storedData = localStorage.getItem('naver_real_estate_data');
+    let count = 0;
+    if (storedData) {
+        try {
+            count = JSON.parse(storedData).length;
+        } catch (e) {
+            count = 0;
+        }
+    }
+
+    const countBadge = document.getElementById('saved-count-badge');
+    if (countBadge) {
+        countBadge.textContent = count > 0 ? ` (${count})` : '';
+    }
+}
+
+// UI 버튼 생성
+function createButtons() {
+    // 이미 버튼이 있으면 생성하지 않음
+    if (document.getElementById('naver-export-container')) {
+        return;
+    }
+
+    // 버튼 컨테이너
+    const buttonContainer = document.createElement('div');
+    buttonContainer.id = 'naver-export-container';
+    buttonContainer.style.cssText = `
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        `;
+
+    // 💾 저장 버튼
+    const saveButton = document.createElement('button');
+    saveButton.innerHTML = '💾 저장<span id="saved-count-badge"></span>';
+    saveButton.style.cssText = `
+            background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);
+            transition: all 0.3s ease;
+        `;
+    saveButton.onmouseover = () => {
+        saveButton.style.transform = 'translateY(-2px)';
+        saveButton.style.boxShadow = '0 6px 20px rgba(76, 175, 80, 0.6)';
+    };
+    saveButton.onmouseout = () => {
+        saveButton.style.transform = 'translateY(0)';
+        saveButton.style.boxShadow = '0 4px 15px rgba(76, 175, 80, 0.4)';
+    };
+    saveButton.onclick = saveToLocalStorage;
+
+    // 🔄 자동 업로드 버튼 (새로 추가!)
+    const uploadButton = document.createElement('button');
+    uploadButton.innerHTML = '� 자동 업로드';
+    uploadButton.style.cssText = `
+            background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(33, 150, 243, 0.4);
+            transition: all 0.3s ease;
+        `;
+    uploadButton.onmouseover = () => {
+        uploadButton.style.transform = 'translateY(-2px)';
+        uploadButton.style.boxShadow = '0 6px 20px rgba(33, 150, 243, 0.6)';
+    };
+    uploadButton.onmouseout = () => {
+        uploadButton.style.transform = 'translateY(0)';
+        uploadButton.style.boxShadow = '0 4px 15px rgba(33, 150, 243, 0.4)';
+    };
+    uploadButton.onclick = autoUploadToServer;
+    uploadButton.title = 'Streamlit 앱으로 자동 업로드';
+
+    // 📥 전체 내보내기 버튼
+    const exportButton = document.createElement('button');
+    exportButton.innerHTML = '📥 전체 내보내기';
+    exportButton.style.cssText = `
+            background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(156, 39, 176, 0.4);
+            transition: all 0.3s ease;
+        `;
+    exportButton.onmouseover = () => {
+        exportButton.style.transform = 'translateY(-2px)';
+        exportButton.style.boxShadow = '0 6px 20px rgba(156, 39, 176, 0.6)';
+    };
+    exportButton.onmouseout = () => {
+        exportButton.style.transform = 'translateY(0)';
+        exportButton.style.boxShadow = '0 4px 15px rgba(156, 39, 176, 0.4)';
+    };
+    exportButton.onclick = exportAllData;
+
+    // 🗑️ 초기화 버튼
+    const clearButton = document.createElement('button');
+    clearButton.innerHTML = '🗑️ 초기화';
+    clearButton.style.cssText = `
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        `;
+    clearButton.onmouseover = () => {
+        clearButton.style.background = '#5a6268';
+    };
+    clearButton.onmouseout = () => {
+        clearButton.style.background = '#6c757d';
+    };
+    clearButton.onclick = clearSavedData;
+
+    // 버튼 추가
+    buttonContainer.appendChild(saveButton);
+    buttonContainer.appendChild(uploadButton);
+    buttonContainer.appendChild(exportButton);
+    buttonContainer.appendChild(clearButton);
+    document.body.appendChild(buttonContainer);
+
+    // 초기 카운트 업데이트
+    updateSavedCount();
+}
+
+// 페이지 로드 시 버튼 생성
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', createButtons);
+} else {
+    createButtons();
+}
+
+// MutationObserver로 페이지 변경 감지
 const exportObserver = new MutationObserver(function (mutations) {
     mutations.forEach(function (mutation) {
         if (mutation.addedNodes.length > 0) {
             const complexTitle = document.querySelector("#complexTitle");
-            if (complexTitle && !document.getElementById('json-export-btn')) {
-                setTimeout(addExportButton, 500);
+            if (complexTitle && !document.getElementById('naver-export-container')) {
+                setTimeout(createButtons, 500);
             }
         }
     });
@@ -746,4 +965,4 @@ if (document.querySelector('.map_wrap')) {
     });
 }
 
-console.log('✓ 모든 기능이 포함된 Tampermonkey 스크립트 로드 완료');
+console.log('✓ 네이버 부동산 데이터 수집 스크립트 로드 완료 (자동 업로드 포함)');

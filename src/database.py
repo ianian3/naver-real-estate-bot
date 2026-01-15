@@ -14,7 +14,8 @@ class RealEstateDB:
     def _init_tables(self):
         """데이터베이스 테이블 생성"""
         # 아파트 단지 정보 테이블
-        self.cursor.execute('''
+        # 기존 테이블 생성
+        self.conn.execute('''
             CREATE TABLE IF NOT EXISTS complexes (
                 complex_no TEXT PRIMARY KEY,
                 complex_name TEXT,
@@ -22,34 +23,63 @@ class RealEstateDB:
                 total_households INTEGER,
                 build_year INTEGER,
                 total_area REAL,
-                updated_at TEXT
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
-        # 매물 가격 정보 테이블 (개선된 스키마)
-        self.cursor.execute('''
+        self.conn.execute('''
             CREATE TABLE IF NOT EXISTS prices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 complex_no TEXT,
-                collected_at TEXT,
                 area_type TEXT,
                 exclusive_area REAL,
-                price INTEGER,
                 transaction_type TEXT,
-                deposit INTEGER,
+                price BIGINT,
+                deposit BIGINT,
                 floor TEXT,
                 floor_number INTEGER,
                 direction TEXT,
-                FOREIGN KEY (complex_no) REFERENCES complexes(complex_no)
+                collected_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (complex_no) REFERENCES complexes (complex_no)
             )
         ''')
         
-        # 인덱스 생성 (개선된 인덱스)
-        self.cursor.execute('''
+        # 사용자 테이블 추가
+        self.conn.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                plan TEXT DEFAULT 'free',
+                max_watchlist INTEGER DEFAULT 3,
+                email_notifications BOOLEAN DEFAULT 1,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 관심 단지 테이블
+        self.conn.execute('''
+            CREATE TABLE IF NOT EXISTS watchlist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                complex_no TEXT NOT NULL,
+                complex_name TEXT,
+                alert_price_drop REAL DEFAULT 5.0,
+                alert_gap_threshold BIGINT DEFAULT 50000000,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, complex_no),
+                FOREIGN KEY (user_id) REFERENCES users (id),
+                FOREIGN KEY (complex_no) REFERENCES complexes (complex_no)
+            )
+        ''')
+        
+        # 인덱스 생성
+        self.conn.execute('''
             CREATE INDEX IF NOT EXISTS idx_prices_complex_no 
             ON prices(complex_no)
         ''')
-        self.cursor.execute('''
+        self.conn.execute('''
             CREATE INDEX IF NOT EXISTS idx_prices_collected_at 
             ON prices(collected_at)
         ''')

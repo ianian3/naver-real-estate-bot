@@ -1,5 +1,19 @@
-requests>=2.31.0
-pandas>=2.0.0
-playwright>=1.40.0
+requeststreamlit
+pandas
+requests
+plotly
+playwright
+
+# Authentication
+streamlit-authenticator
+bcrypt
+pyyaml
+
+# Background Tasks (for auto-crawling)
+celery
+redis
+
+# Email notifications
+sendgrid>=1.40.0
 beautifulsoup4>=4.12.0
 lxml>=4.9.0

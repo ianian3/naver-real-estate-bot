@@ -1,0 +1,92 @@
+// ==UserScript==
+// @name         네이버 부동산 가격 분석 (개선 버전)
+// @namespace    http://tampermonkey.net/
+// @version      3.0
+// @description  네이버 부동산 가격 추출 및 Python 내보내기 (LocalStorage + 자동 업로드)
+// @author       You
+// @match        https://new.land.naver.com/complexes/*
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    // ... (기존 코드는 그대로 유지)
+
+    // 버튼 생성 헬퍼 함수
+    function createButton(text, bgColor) {
+        const button = document.createElement('button');
+        button.innerHTML = text;
+        button.style.cssText = `
+            background: ${bgColor};
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+            margin-bottom: 8px;
+        `;
+        button.onmouseover =() => {
+            button.style.transform = 'translateY(-2px)';
+            button.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.3)';
+        };
+        button.onmouseout = () => {
+            button.style.transform = 'translateY(0)';
+            button.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.2)';
+        };
+        return button;
+    }
+
+    // UI 버튼 추가
+    function addExportButtons() {
+        // 버튼 컨테이너
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            gap: 8px;
+            flex-direction: column;
+        `;
+
+        // 💾 저장 버튼
+        const saveButton = createButton('💾 저장', 'linear-gradient(135deg, #4CAF50 0%, #388E3C 100%)');
+        saveButton.onclick = saveToLocalStorage;
+
+        // 🔄 자동 업로드 버튼
+        const uploadButton = createButton('🔄 자동 업로드', 'linear-gradient(135deg, #2196F3 0%, #0D47A1 100%)');
+        uploadButton.onclick = autoUploadToServer;
+        uploadButton.title = 'Streamlit 앱으로 자동 업로드';
+
+        // 📥 전체 내보내기 버튼
+        const exportButton = createButton('📥 전체 내보내기', 'linear-gradient(135deg, #9C27B0 0%, #6A1B9A 100%)');
+        exportButton.onclick = exportAllData;
+
+        // 🗑️ 초기화 버튼
+        const clearButton = createButton('🗑️ 초기화', '#6c757d');
+        clearButton.style.padding = '8px 16px';
+        clearButton.style.fontSize = '12px';
+        clearButton.onclick = clearSavedData;
+
+        buttonContainer.appendChild(saveButton);
+        buttonContainer.appendChild(uploadButton);
+        buttonContainer.appendChild(exportButton);
+        buttonContainer.appendChild(clearButton);
+        document.body.appendChild(buttonContainer);
+
+        // 저장 개수 업데이트
+        updateSavedCount();
+    }
+
+    // 페이지 로드 후 버튼 추가
+    window.addEventListener('load', () => {
+        setTimeout(addExportButtons, 2000);
+    });
+
+})();

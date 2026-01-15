@@ -1,5 +1,6 @@
 import streamlit as st
 from src.database import RealEstateDB
+from src.auth import UserManager
 from src.analyzer import get_all_area_summaries, format_price_display
 import plotly.express as px
 import pandas as pd
@@ -9,6 +10,8 @@ import tempfile
 import os
 import subprocess
 import time
+import extra_streamlit_components as stx
+import streamlit.components.v1 as components
 
 # 페이지 설정
 st.set_page_config(
@@ -17,8 +20,125 @@ st.set_page_config(
     layout="wide"
 )
 
-# 타이틀
-st.title("🏢 네이버 부동산 가격 분석")
+# 🆕 자동 업로드 감지 및 처리
+pending_data_json = components.html("""
+<script>
+// LocalStorage에서 pending_upload 확인 및 반환
+function getPendingUpload() {
+    const pendingUpload = localStorage.getItem('pending_upload');
+    if (pendingUpload) {
+        console.log('Pending upload detected!');
+        // 플래그 제거
+        localStorage.removeItem('pending_upload');
+        return pendingUpload;
+    }
+    return null;
+}
+
+// Streamlit으로 데이터 반환
+const data = getPendingUpload();
+if (data) {
+    // return을 통해 Python으로 데이터 전달
+    window.parent.postMessage({streamlitData: data}, '*');
+}
+</script>
+""", height=0)
+
+# LocalStorage에서 가져온 데이터 처리
+if 'pending_upload_check' not in st.session_state:
+    st.session_state.pending_upload_check = True
+    
+# Streamlit 컴포넌트로부터 데이터를 직접 받을 수 없으므로
+# 사용자가 버튼을 눌러 수동으로 확인하도록 변경
+
+# ================================
+# 사용자 인증 (쿠키 기반 세션 유지)
+# ================================
+
+# 쿠키 매니저 초기화
+cookie_manager = stx.CookieManager()
+
+# 세션 상태 초기화
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+if 'user' not in st.session_state:
+    st.session_state.user = None
+
+user_manager = UserManager()
+
+# 쿠키에서 자동 로그인 시도 (페이지 로드 시)
+if not st.session_state.authenticated:
+    saved_username = cookie_manager.get('username')
+    if saved_username:
+        user = user_manager.get_user_by_username(saved_username)
+        if user:
+            st.session_state.authenticated = True
+            st.session_state.user = user
+
+# 로그인되지 않은 경우
+if not st.session_state.authenticated:
+    st.title("🏢 네이버 부동산 분석 서비스")
+    
+    tab1, tab2 = st.tabs(["로그인", "회원가입"])
+    
+    with tab1:
+        st.subheader("로그인")
+        login_username = st.text_input("아이디", key="login_username")
+        login_password = st.text_input("비밀번호", type="password", key="login_password")
+        
+        if st.button("로그인", type="primary"):
+            user = user_manager.verify_user(login_username, login_password)
+            if user:
+                st.session_state.authenticated = True
+                st.session_state.user = user
+                # 쿠키에 사용자명 저장 (30일 유지)
+                cookie_manager.set('username', login_username, expires_at=datetime.now() + pd.Timedelta(days=30))
+                st.success(f"환영합니다, {user['username']}님!")
+                st.rerun()
+            else:
+                st.error("아이디 또는 비밀번호가 올바르지 않습니다.")
+    
+    with tab2:
+        st.subheader("회원가입")
+        signup_username = st.text_input("아이디", key="signup_username")
+        signup_email = st.text_input("이메일", key="signup_email")
+        signup_password = st.text_input("비밀번호", type="password", key="signup_password")
+        signup_password_confirm = st.text_input("비밀번호 확인", type="password", key="signup_password_confirm")
+        
+        if st.button("가입하기", type="primary"):
+            if not signup_username or not signup_email or not signup_password:
+                st.error("모든 항목을 입력해주세요.")
+            elif signup_password != signup_password_confirm:
+                st.error("비밀번호가 일치하지 않습니다.")
+            elif len(signup_password) < 6:
+                st.error("비밀번호는 6자 이상이어야 합니다.")
+            else:
+                if user_manager.create_user(signup_username, signup_email, signup_password):
+                    st.success("회원가입 완료! 로그인해주세요.")
+                else:
+                    st.error("이미 존재하는 아이디 또는 이메일입니다.")
+    
+    st.stop()
+
+# ================================
+# 로그인 후 메인 앱
+# ================================
+
+# 상단 사용자 정보 및 로그아웃
+col1, col2, col3 = st.columns([2, 1, 1])
+with col1:
+    st.title("🏢 네이버 부동산 가격 분석")
+with col2:
+    user = st.session_state.user
+    plan_badge = "🆓 무료" if user['plan'] == 'free' else "⭐ 프리미엄"
+    st.info(f"👤 {user['username']} ({plan_badge})")
+with col3:
+    if st.button("🚪 로그아웃"):
+        st.session_state.authenticated = False
+        st.session_state.user = None
+        # 쿠키 삭제
+        cookie_manager.delete('username')
+        st.rerun()
 
 # DB 연결 (파일 업로드 전에 먼저 정의)
 @st.cache_resource
@@ -27,7 +147,124 @@ def get_db():
 
 db = get_db()
 
+# ================================
+# 사이드바 - 관심 단지 관리
+# ================================
+
+st.sidebar.header("⭐ 관심 단지 관리")
+
+user = st.session_state.user
+user_id = user['id']
+max_watchlist = user['max_watchlist']
+
+# 현재 관심 단지 개수
+current_watchlist = user_manager.get_watchlist(user_id)
+watchlist_count = len(current_watchlist)
+
+# 사용량 표시
+if watchlist_count >= max_watchlist:
+    st.sidebar.warning(f"⚠️ {watchlist_count}/{max_watchlist} 사용 중 (최대)")
+else:
+    st.sidebar.info(f"📊 {watchlist_count}/{max_watchlist} 사용 중")
+
+# 관심 단지 목록
+if current_watchlist:
+    st.sidebar.subheader("📋 현재 관심 단지")
+    for item in current_watchlist:
+        col1, col2 = st.sidebar.columns([3, 1])
+        with col1:
+            st.write(f"🏢 {item['complex_name']}")
+        with col2:
+            if st.button("🗑️", key=f"remove_{item['complex_no']}"):
+                if user_manager.remove_from_watchlist(user_id, item['complex_no']):
+                    st.success(f"{item['complex_name']} 제거 완료!")
+                    st.rerun()
+                else:
+                    st.error("제거 실패")
+else:
+    st.sidebar.info("관심 단지가 없습니다.")
+
+# 관심 단지 추가
+st.sidebar.subheader("➕ 관심 단지 추가")
+
+if watchlist_count >= max_watchlist:
+    st.sidebar.error(f"⚠️ 무료 플랜은 최대 {max_watchlist}개까지 추적 가능합니다.")
+    if user['plan'] == 'free':
+        st.sidebar.info("💡 프리미엄 플랜으로 업그레이드하면 무제한 추적!")
+        if st.sidebar.button("🚀 업그레이드", type="primary"):
+            st.sidebar.info("결제 기능은 곧 추가됩니다!")
+else:
+    # DB에서 모든 단지 목록 가져오기
+    all_complexes_query = "SELECT DISTINCT complex_no, complex_name FROM complexes ORDER BY complex_name"
+    all_complexes_df = pd.read_sql_query(all_complexes_query, db.conn)
+    
+    # 이미 추가된 단지 제외
+    watchlist_nos = [w['complex_no'] for w in current_watchlist]
+    available_complexes = all_complexes_df[~all_complexes_df['complex_no'].isin(watchlist_nos)]
+    
+    if not available_complexes.empty:
+        complex_options = {row['complex_name']: row['complex_no'] for _, row in available_complexes.iterrows()}
+        
+        selected_name = st.sidebar.selectbox(
+            "단지 선택",
+            options=list(complex_options.keys()),
+            key="watchlist_select"
+        )
+        
+        if st.sidebar.button("➕ 추가", type="primary"):
+            selected_no = complex_options[selected_name]
+            if user_manager.add_to_watchlist(user_id, selected_no, selected_name):
+                st.sidebar.success(f"✅ {selected_name} 추가 완료!")
+                st.rerun()
+            else:
+                st.sidebar.error("추가 실패 (이미 존재)")
+    else:
+        st.sidebar.info("추가 가능한 단지가 없습니다.")
+
+st.sidebar.markdown("---")
+
+# ================================
+# 사이드바 - 알림 설정
+# ================================
+
+st.sidebar.header("🔔 알림 설정")
+
+# 이메일 설정 확인
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+has_email_config = bool(os.getenv('EMAIL_ADDRESS') and os.getenv('EMAIL_PASSWORD'))
+
+if not has_email_config:
+    st.sidebar.warning("⚠️ 이메일 설정이 필요합니다")
+    with st.sidebar.expander("📝 설정 방법"):
+        st.write("""
+        1. `.env` 파일 생성
+        2. Gmail 앱 비밀번호 발급
+        3. 환경변수 설정
+        
+        자세한 내용: `EMAIL_SETUP.md` 참고
+        """)
+else:
+    st.sidebar.success("✅ 이메일 설정 완료")
+    
+    # 테스트 이메일 발송
+    if st.sidebar.button("📧 테스트 이메일"):
+        from src.notifications import EmailNotifier
+        notifier = EmailNotifier()
+        
+        user_email = st.session_state.user['email']
+        if notifier.send_test_email(user_email):
+            st.sidebar.success(f"✅ 발송 완료!")
+        else:
+            st.sidebar.error("❌ 발송 실패")
+
+st.sidebar.markdown("---")
+
+# ================================
 # 사이드바 - 파일 업로드 기능
+# ================================
 st.sidebar.header("📥 데이터 가져오기")
 
 uploaded_file = st.sidebar.file_uploader(
@@ -123,8 +360,25 @@ if uploaded_file is not None:
 
 st.sidebar.divider()
 
-# 사이드바 필터
-st.sidebar.header("🔍 필터")
+# ================================
+# 사이드바 - 데이터 필터 설정
+# ================================
+
+st.sidebar.header("🔍 데이터 필터")
+
+# 전체/관심 단지 토글
+filter_mode = st.sidebar.radio(
+    "표시할 단지",
+    options=["전체 단지", "내 관심 단지만"],
+    index=0,
+    help="메인 화면에 표시할 데이터를 선택하세요"
+)
+
+st.sidebar.markdown("---")
+
+# ================================
+# 메인 영역 - 데이터 로드 및 필터링
+# ================================
 
 # 데이터 로드 함수
 @st.cache_data(ttl=60)
@@ -133,6 +387,7 @@ def load_formatted_data():
         query = """
         SELECT 
             c.complex_name as 아파트명,
+            c.complex_no as complex_no,
             c.total_households as 세대수,
             c.build_year as 건축년도,
             (2026 - c.build_year) as 연식,
@@ -160,11 +415,21 @@ def load_formatted_data():
         # DB가 비어있거나 오류 발생 시 빈 DataFrame 반환
         return pd.DataFrame()
 
+# 데이터 로드
 df = load_formatted_data()
+
+# 관심 단지 필터링
+if filter_mode == "내 관심 단지만" and current_watchlist:
+    watchlist_nos = [w['complex_no'] for w in current_watchlist]
+    df = df[df['complex_no'].isin(watchlist_nos)]
+    st.info(f"📌 {len(current_watchlist)}개 관심 단지 데이터만 표시 중")
+elif filter_mode == "내 관심 단지만" and not current_watchlist:
+    st.warning("⚠️ 관심 단지가 없습니다. 사이드바에서 추가해주세요!")
+    df = pd.DataFrame()
 
 # 데이터가 없는 경우 처리
 if df.empty:
-    st.info("📊 데이터가 없습니다. 좌측 사이드바에서 JSON 파일을 업로드하세요.")
+    st.warning("데이터가 없습니다. JSON 파일을 업로드하거나 관심 단지를 추가해주세요.")
     st.stop()
 
 # 필터 옵션

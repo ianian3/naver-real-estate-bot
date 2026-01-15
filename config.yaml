@@ -1,0 +1,15 @@
+credentials:
+  usernames:
+    demo_user:
+      email: demo@example.com
+      name: Demo User
+      password: $2b$12$KIXqJ3qPvwxW8Y9xZ1xZxeqC7vN3YhJ5L8xZ1xZ  # 'demo123' hashed
+    
+cookie:
+  expiry_days: 30
+  key: naver_real_estate_auth_key  # 변경 필수!
+  name: naver_real_estate_cookie
+
+preauthorized:
+  emails:
+    - beta@realestate-tracker.com
