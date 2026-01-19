@@ -11,6 +11,44 @@ class UserManager:
     
     def __init__(self, db_path: str = "data/real_estate.db"):
         self.db_path = db_path
+        self._init_tables()
+    
+    def _init_tables(self):
+        """사용자 관련 테이블 초기화"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # users 테이블
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                plan TEXT DEFAULT 'free',
+                max_watchlist INTEGER DEFAULT 3,
+                email_notifications BOOLEAN DEFAULT 1,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # watchlist 테이블
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS watchlist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                complex_no TEXT NOT NULL,
+                complex_name TEXT,
+                alert_price_drop REAL DEFAULT 5.0,
+                alert_gap_threshold BIGINT DEFAULT 50000000,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, complex_no),
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
     
     def get_connection(self):
         """DB 연결"""
