@@ -133,9 +133,15 @@ class UserManager:
     
     def can_add_watchlist(self, user_id: int) -> bool:
         """관심 단지 추가 가능 여부 확인"""
-        user = self.get_user_by_username(username='')  # 실제로는 user_id로 조회
-        if not user:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT max_watchlist FROM users WHERE id = ?', (user_id,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if not result:
             return False
         
+        max_watchlist = result[0]
         current_count = self.get_watchlist_count(user_id)
-        return current_count < user['max_watchlist']
+        return current_count < max_watchlist

@@ -17,7 +17,7 @@ git add .
 git commit -m "Initial commit: Naver Real Estate Bot with Streamlit UI"
 
 # GitHub 저장소 연결 (본인의 GitHub 저장소 URL로 변경)
-git remote add origin https://github.com/ianian3/naver_real_estate_bot.git
+git remote add origin https://github.com/ianian3/naver-real-estate-bot.git
 
 # 업로드
 git push -u origin main

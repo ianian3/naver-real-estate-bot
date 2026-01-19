@@ -1,15 +1,30 @@
-credentials:
-  usernames:
-    demo_user:
-      email: demo@example.com
-      name: Demo User
-      password: $2b$12$KIXqJ3qPvwxW8Y9xZ1xZxeqC7vN3YhJ5L8xZ1xZ  # 'demo123' hashed
-    
-cookie:
-  expiry_days: 30
-  key: naver_real_estate_auth_key  # 변경 필수!
-  name: naver_real_estate_cookie
+# ⚠️ 주의: 이 파일은 public 저장소에 민감한 정보를 포함하지 않습니다.
+# 모든 비밀번호 및 API 키는 .env 파일에 저장하세요.
+# 
+# 개발 환경 설정:
+# 1. .env 파일 생성 (→ .env.example 참고)
+# 2. .gitignore에 .env 추가 확인
+# 3. 배포 전 민감한 정보 확인
 
-preauthorized:
-  emails:
-    - beta@realestate-tracker.com
+# 데이터베이스 연결
+database:
+  path: data/real_estate.db
+  backup_enabled: true
+
+# 크롤링 설정
+crawler:
+  min_floor: 4
+  target_areas: [59, 84]  # m²
+  rate_limit: 2.0  # 초
+  max_retries: 3
+  timeout: 30  # 초
+
+# Celery 스케줄
+celery:
+  crawl_schedule: "0 2 * * *"  # 매일 새벽 2시
+  timezone: "Asia/Seoul"
+
+# 기타 설정
+notifications:
+  enabled: true
+  sender: "naver-real-estate@example.com"

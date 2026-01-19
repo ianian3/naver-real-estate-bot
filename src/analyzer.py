@@ -72,25 +72,27 @@ def get_price_summary_by_area(
     use_lowest_lease: bool = False
 ) -> Dict:
     """
-    면적 타입별 가격 요약 (월부 기준)
+    면적 타입별 가격 요약
     
     Args:
-        df: 매물 DataFrame
+        df: 매물 DataFrame (가격은 만원 단위 저장됨)
         area_type: 면적 타입 (예: "59A", "84A")
         use_lowest_lease: True면 최저 전세, False면 최고 전세
     
     Returns:
         {
-            'sale_min': 매매 최저가,
+            'sale_min': 매매 최저가 (만원),
             'sale_floor': 매매 최저가 층,
             'sale_count': 매매 매물 수,
-            'lease_max': 전세 최고가 (또는 최저가),
+            'lease_max': 전세 최고/최저가 (만원),
             'lease_floor': 전세 층,
             'lease_count': 전세 매물 수,
-            'gap': 갭,
-            'lease_ratio': 전세가율,
+            'gap': 갭 (만원),
+            'lease_ratio': 전세가율 (문자열),
             'signal': 신호등 (색상, 툴팁)
         }
+    
+    주의: 모든 가격은 \"만원\" 단위로 반환됨
     """
     result = {
         'sale_min': 0,
@@ -104,7 +106,8 @@ def get_price_summary_by_area(
         'signal': ('gray', '-')
     }
     
-    if df.empty:
+    # 입력 데이터 검증
+    if df is None or df.empty:
         return result
     
     # 해당 면적 타입만 필터링
@@ -116,8 +119,9 @@ def get_price_summary_by_area(
     # 매매 데이터 처리
     sale_df = area_df[area_df['거래유형'] == 'SALE'].copy()
     if not sale_df.empty:
-        # 가격이 만원 단위인지 원 단위인지 확인
-        if sale_df['가격'].max() > 1000000:  # 원 단위
+        # DB에서 조회한 가격은 이미 만원 단위
+        # (만약 원 단위면 안전하게 변환)
+        if sale_df['가격'].max() > 100000:  # 원 단위로 가정
             sale_df['가격_만원'] = sale_df['가격'] / 10000
         else:  # 이미 만원 단위
             sale_df['가격_만원'] = sale_df['가격']
@@ -131,8 +135,8 @@ def get_price_summary_by_area(
     # 전세 데이터 처리
     lease_df = area_df[area_df['거래유형'] == 'LEASE'].copy()
     if not lease_df.empty:
-        # 가격이 만원 단위인지 원 단위인지 확인
-        if lease_df['보증금'].max() > 1000000:  # 원 단위
+        # DB에서 조회한 가격은 이미 만원 단위
+        if lease_df['보증금'].max() > 100000:  # 원 단위로 가정
             lease_df['보증금_만원'] = lease_df['보증금'] / 10000
         else:  # 이미 만원 단위
             lease_df['보증금_만원'] = lease_df['보증금']
@@ -184,7 +188,7 @@ def get_all_area_summaries(
     모든 면적 타입별 가격 요약
     
     Args:
-        df: 매물 DataFrame
+        df: 매물 DataFrame (가격은 만원 단위)
         use_lowest_lease: True면 최저 전세, False면 최고 전세
         signal_multiplier: 신호등 배율
     
@@ -194,12 +198,18 @@ def get_all_area_summaries(
             '84A': {...},
             ...
         }
+    
+    주의: 입력 df가 None 또는 비어있으면 빈 딕셔너리 반환
     """
-    if df.empty:
+    # 입력 데이터 검증
+    if df is None or df.empty:
         return {}
     
     summaries = {}
     area_types = df['면적타입'].unique()
+    
+    if len(area_types) == 0:
+        return {}
     
     for area_type in sorted(area_types):
         summary = get_price_summary_by_area(df, area_type, use_lowest_lease)
@@ -207,10 +217,10 @@ def get_all_area_summaries(
         # 신호등 계산 (같은 면적의 다음 가격과 비교)
         sale_df = df[(df['면적타입'] == area_type) & (df['거래유형'] == 'SALE')].copy()
         if len(sale_df) > 1 and summary['sale_min'] > 0:
-            # 가격을 만원 단위로 변환
-            if sale_df['가격'].max() > 1000000:
+            # 가격은 이미 만원 단위
+            if sale_df['가격'].max() > 100000:  # 원 단위로 가정
                 sale_df['가격_만원'] = sale_df['가격'] / 10000
-            else:
+            else:  # 이미 만원 단위
                 sale_df['가격_만원'] = sale_df['가격']
             
             sorted_prices = sale_df['가격_만원'].sort_values().unique()
@@ -235,23 +245,32 @@ def format_price_display(price: int) -> str:
     가격을 억/만원 형식으로 변환
     
     Args:
-        price: 가격 (만원)
+        price: 가격 (만원 단위)
     
     Returns:
-        "12억 5000" 형식
+        "12억 5000" 형식 문자열
+    
+    예시:
+        120000 (만원) → "12억"
+        120500 (만원) → "12억 500"
+        5000 (만원) → "5,000"
+        0 → "0"
     """
+    if not isinstance(price, (int, float)):
+        return "0"
+    
     if price == 0:
         return "0"
     
-    eok = price // 10000
-    man = price % 10000
+    eok = int(price) // 10000
+    man = int(price) % 10000
     
     if eok > 0 and man > 0:
         return f"{eok}억 {man:,}"
     elif eok > 0:
         return f"{eok}억"
     else:
-        return f"{man:,}"
+        return f"{int(price):,}"
 
 
 # 테스트 함수

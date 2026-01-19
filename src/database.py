@@ -126,7 +126,13 @@ class RealEstateDB:
         print(f"✓ {len(df)}개 단지 정보 저장 완료")
     
     def save_prices(self, df, complex_no):
-        """매물 가격 정보를 데이터베이스에 저장"""
+        """
+        매물 가격 정보를 데이터베이스에 저장
+        
+        주의: 가격은 \"만원\" 단위로 저장됨
+        - 매매가: '가격' 컬럼에 저장 (원 단위 → 만원 단위로 변환)
+        - 전세가: '보증금' 컬럼에 저장 (원 단위 → 만원 단위로 변환)
+        """
         if df is None or df.empty:
             print(f"⚠ [{complex_no}] 저장할 매물 데이터가 없습니다.")
             return
@@ -134,6 +140,16 @@ class RealEstateDB:
         collected_at = datetime.now().isoformat()
         
         for _, row in df.iterrows():
+            # 가격을 원 단위 → 만원 단위로 변환
+            price = row.get('가격', 0)
+            deposit = row.get('보증금', 0)
+            
+            # 원 단위 검사 (100만 이상은 원 단위로 가정)
+            if price > 1000000:
+                price = int(price / 10000)  # 원 → 만원
+            if deposit > 1000000:
+                deposit = int(deposit / 10000)  # 원 → 만원
+            
             self.cursor.execute('''
                 INSERT INTO prices 
                 (complex_no, collected_at, area_type, exclusive_area, 
@@ -144,9 +160,9 @@ class RealEstateDB:
                 collected_at,
                 row.get('면적타입', ''),
                 row.get('전용면적', 0.0),
-                row.get('가격', 0),
+                price,  # 만원 단위
                 row.get('거래유형', 'SALE'),
-                row.get('보증금', 0),
+                deposit,  # 만원 단위
                 row.get('층', ''),
                 row.get('층수', 0),
                 row.get('방향', '')

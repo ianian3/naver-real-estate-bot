@@ -1,19 +1,14 @@
-requeststreamlit
-pandas
 requests
+streamlit
+pandas
 plotly
-playwright
+extra-streamlit-components
+python-dotenv
 
 # Authentication
-streamlit-authenticator
 bcrypt
 pyyaml
 
-# Background Tasks (for auto-crawling)
-celery
-redis
-
 # Email notifications
-sendgrid>=1.40.0
 beautifulsoup4>=4.12.0
 lxml>=4.9.0

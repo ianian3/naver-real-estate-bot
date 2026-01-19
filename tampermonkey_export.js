@@ -218,6 +218,12 @@ function parsePrice(tradePrice) {
         return parseInt(tradePrice)
 }
 
+function extractAreaFromKey(areaKey) {
+    // "59A/59m²" -> 59
+    const match = areaKey.match(/(\d+)m/);
+    return match ? parseInt(match[1]) : 0;
+}
+
 function getPrice_WeolbuStandard() {
 
     let result = {};
@@ -244,54 +250,87 @@ function getPrice_WeolbuStandard() {
 
     }
 
+    // 데이터 수집할 요소들 찾기
+    const articleListArea = document.querySelector("#articleListArea");
+    console.log('articleListArea 요소:', articleListArea);
+    
+    if (!articleListArea) {
+        console.log('⚠️ articleListArea를 찾을 수 없습니다');
+        return result;
+    }
 
+    const articles = articleListArea.querySelectorAll("> div");
+    console.log(`📍 찾은 매물: ${articles.length}개`);
 
-    document.querySelectorAll("#articleListArea > div").forEach(function (ele) {
-        let aptInfo = ele.querySelectorAll("div.info_area .line .spec")[0].innerText.split(", ");
-        let size = aptInfo[0];
-        let floor = aptInfo[1];
-        let tradeType = ele.querySelector("div.price_line .type").innerText;
-        let tradePrice = parsePrice(ele.querySelector("div.price_line .price").innerText);
-        let spec = ele.querySelectorAll(" div.info_area > p:nth-child(2) > span")[0];
-        spec = spec ? spec.innerText : "";
-
-
-
-        if ("매매|전세".indexOf(tradeType) > -1) {
-            if (!checkMandantoryCondition(size)) {
+    articles.forEach(function (ele, idx) {
+        try {
+            // 요소들 찾기
+            const specElements = ele.querySelectorAll("div.info_area .line .spec");
+            if (specElements.length === 0) {
+                console.log(`[${idx}] spec 요소 없음`);
                 return;
             }
-
-            if (!(size in result)) {
-                result[size] = { '매매': 0, '전세': 0, '갭': 0, '전세가율': '-', '매매층': '-', '전세층': '-', '매매갯수': 0, '전세갯수': '0', '매매신': '' };
-                dictPricePerSize[size] = { "매매": {}, "전세": {} };
+            
+            let aptInfo = specElements[0].innerText.split(", ");
+            let size = aptInfo[0];
+            let floor = aptInfo[1];
+            
+            const typeElement = ele.querySelector("div.price_line .type");
+            const priceElement = ele.querySelector("div.price_line .price");
+            
+            if (!typeElement || !priceElement) {
+                console.log(`[${idx}] 가격 정보 없음`, {size, floor});
+                return;
             }
+            
+            let tradeType = typeElement.innerText;
+            let tradePrice = parsePrice(priceElement.innerText);
+            
+            // spec 정보 추출
+            let specSpans = ele.querySelectorAll("div.info_area > p:nth-child(2) > span");
+            let spec = specSpans.length > 0 ? specSpans[0].innerText : "";
 
-            if (!document.querySelector('#address_group2').checked) {
-                if (!dictPricePerSize[size][tradeType][aptInfo.join(',')]) {
-                    dictPricePerSize[size][tradeType][aptInfo.join(',')] = [tradePrice, getFloor(floor)[0], spec, 1]
+            console.log(`[${idx}] ${size} / ${floor} / ${tradeType} / ${tradePrice}만원 / ${spec}`);
+
+            if ("매매|전세".indexOf(tradeType) > -1) {
+                if (!checkMandantoryCondition(size)) {
+                    console.log(`  → 필터링됨 (면적 체크)`);
+                    return;
+                }
+
+                if (!(size in result)) {
+                    result[size] = { '매매': 0, '전세': 0, '갭': 0, '전세가율': '-', '매매층': '-', '전세층': '-', '매매갯수': 0, '전세갯수': '0', '매매신': '' };
+                    dictPricePerSize[size] = { "매매": {}, "전세": {} };
+                }
+
+                if (!document.querySelector('#address_group2').checked) {
+                    if (!dictPricePerSize[size][tradeType][aptInfo.join(',')]) {
+                        dictPricePerSize[size][tradeType][aptInfo.join(',')] = [tradePrice, getFloor(floor)[0], spec, 1]
+                    }
+                    else {
+                        let beforeValue = dictPricePerSize[size][tradeType][aptInfo.join(',')];
+                        let newValue = [tradePrice, getFloor(floor)[0], spec];
+
+                        dictPricePerSize[size][tradeType][aptInfo.join(',')] = tradeTypeValueFnc(tradeType, beforeValue, newValue)
+
+                    }
                 }
                 else {
-                    let beforeValue = dictPricePerSize[size][tradeType][aptInfo.join(',')];
-                    let newValue = [tradePrice, getFloor(floor)[0], spec];
+                    if (!dictPricePerSize[size][tradeType][aptInfo.join(',') + "_" + tradePrice]) {
+                        dictPricePerSize[size][tradeType][aptInfo.join(',') + "_" + tradePrice] = [tradePrice, getFloor(floor)[0], spec, 1]
+                    }
+                    else {
+                        let beforeValue = dictPricePerSize[size][tradeType][aptInfo.join(',') + "_" + tradePrice];
+                        let newValue = [tradePrice, getFloor(floor)[0], spec];
 
-                    dictPricePerSize[size][tradeType][aptInfo.join(',')] = tradeTypeValueFnc(tradeType, beforeValue, newValue)
+                        dictPricePerSize[size][tradeType][aptInfo.join(',') + "_" + tradePrice] = tradeTypeValueFnc(tradeType, beforeValue, newValue)
 
+                    }
                 }
+
             }
-            else {
-                if (!dictPricePerSize[size][tradeType][aptInfo.join(',') + "_" + tradePrice]) {
-                    dictPricePerSize[size][tradeType][aptInfo.join(',') + "_" + tradePrice] = [tradePrice, getFloor(floor)[0], spec, 1]
-                }
-                else {
-                    let beforeValue = dictPricePerSize[size][tradeType][aptInfo.join(',') + "_" + tradePrice];
-                    let newValue = [tradePrice, getFloor(floor)[0], spec];
-
-                    dictPricePerSize[size][tradeType][aptInfo.join(',') + "_" + tradePrice] = tradeTypeValueFnc(tradeType, beforeValue, newValue)
-
-                }
-            }
-
+        } catch (e) {
+            console.log(`[${idx}] 처리 오류:`, e.message);
         }
 
     });
@@ -357,6 +396,7 @@ function getPrice_WeolbuStandard() {
         }
     }
 
+    console.log('✓ 최종 수집 결과:', result);
     return result;
 }
 
@@ -636,7 +676,10 @@ function saveToLocalStorage() {
         totalHouseholds = parseInt(householdsMatch[1].replace(/,/g, ''));
     }
 
+    // 가격 데이터 수집 시도
     const priceData = getPrice_WeolbuStandard();
+    console.log('Tampermonkey: getPrice_WeolbuStandard 반환값 =', priceData);
+    console.log('Tampermonkey: 수집된 면적 개수 =', Object.keys(priceData).length);
 
     const complexData = {
         metadata: {
@@ -651,23 +694,31 @@ function saveToLocalStorage() {
     };
 
     // 면적별 가격 데이터 변환
+    console.log('Tampermonkey: priceData =', priceData);
+    
     for (const areaKey in priceData) {
         const data = priceData[areaKey];
-        if (!data || !data.area) continue;
-
+        console.log(`Processing area: ${areaKey}, data:`, data);
+        
+        // 데이터가 없거나 가격 정보가 없으면 스킵
+        if (!data) continue;
+        if (!data['매매'] && !data['전세']) continue;
+        
         complexData.listings.push({
             area_type: areaKey,
-            exclusive_area: data.area,
-            sale_price: data.price || 0,
-            sale_floor: data.floor || '-',
-            sale_count: data.count || 0,
-            lease_price: data.price_j || 0,
-            lease_floor: data.floor_j || '-',
-            lease_count: data.count_j || 0,
-            gap: data.gap || 0,
-            lease_rate: data.rate || '-'
+            exclusive_area: data['전용면적'] || extractAreaFromKey(areaKey),
+            sale_price: data['매매'] || 0,
+            sale_floor: data['매매층'] || '-',
+            sale_count: data['매매갯수'] || 0,
+            lease_price: data['전세'] || 0,
+            lease_floor: data['전세층'] || '-',
+            lease_count: data['전세갯수'] || 0,
+            gap: data['갭'] || 0,
+            lease_rate: data['전세가율'] || '-'
         });
     }
+    
+    console.log('Tampermonkey: Final listings =', complexData.listings);
 
     // 기존 저장된 데이터 가져오기
     let savedData = [];

@@ -35,9 +35,13 @@ def job():
                     scrape_complex(c_no, headless=HEADLESS)
                 )
                 
+                # 필터링 적용
+                from src.filter import filter_listings
                 if not df_sale.empty:
+                    df_sale = filter_listings(df_sale)
                     db.save_prices(df_sale, c_no)
                 if not df_lease.empty:
+                    df_lease = filter_listings(df_lease)
                     db.save_prices(df_lease, c_no)
                 
                 time.sleep(3)  # Rate limiting
@@ -50,12 +54,16 @@ def job():
             print("  - 매매 데이터 조회 중...")
             df_sale = get_listings_api(c_no, transaction_type='SALE')
             if not df_sale.empty:
+                from src.filter import filter_listings
+                df_sale = filter_listings(df_sale)
                 db.save_prices(df_sale, c_no)
             time.sleep(1)
             
             print("  - 전세 데이터 조회 중...")
             df_lease = get_listings_api(c_no, transaction_type='LEASE')
             if not df_lease.empty:
+                from src.filter import filter_listings
+                df_lease = filter_listings(df_lease)
                 db.save_prices(df_lease, c_no)
             time.sleep(1)
 

@@ -85,6 +85,9 @@ def scrape_articles(complex_no: str, trade_type: str = 'A1', max_pages: int = 3)
     """
     all_listings = []
     transaction_type = 'SALE' if trade_type == 'A1' else 'LEASE'
+    retry_count = 0
+    max_retries = 3
+    base_wait = 2  # 초
     
     for page in range(1, max_pages + 1):
         url = f"{BASE_URL}/articles/complex/{complex_no}"
@@ -98,62 +101,75 @@ def scrape_articles(complex_no: str, trade_type: str = 'A1', max_pages: int = 3)
             'order': 'rank'
         }
         
-        try:
-            time.sleep(random.uniform(2.5, 4.5))  # Rate limiting - 더 긴 대기
-            response = requests.get(url, params=params, headers=HEADERS, timeout=10)
-            response.raise_for_status()
+        while retry_count < max_retries:
+            try:
+                wait_time = base_wait * (2 ** retry_count)  # 지수 백오프
+                time.sleep(random.uniform(wait_time - 0.5, wait_time + 0.5))  # Rate limiting
+                response = requests.get(url, params=params, headers=HEADERS, timeout=10)
+                response.raise_for_status()
+                
+                data = response.json()
+                articles = data.get('articleList', [])
+                
+                if not articles:
+                    break  # 더 이상 데이터 없음
+                
+                for article in articles:
+                    # 면적 확인
+                    area = float(article.get('area', 0))
+                    
+                    # 59m² 또는 84m² 필터링 (±3m²)
+                    if not (56 <= area <= 62 or 81 <= area <= 87):
+                        continue
+                    
+                    # 층수 확인
+                    floor_info = article.get('floorInfo', '')
+                    floor_num = parse_floor_number(floor_info)
+                    
+                    # 4층 이상만
+                    if floor_num < 4:
+                        continue
+                    
+                    # 가격
+                    price = parse_price_number(article.get('dealOrWarrantPrc', 0))
+                    
+                    # 면적타입
+                    area_type = "59A" if area < 70 else "84A"
+                    
+                    listing = {
+                        '면적타입': area_type,
+                        '전용면적': area,
+                        '거래유형': transaction_type,
+                        '층': floor_info,
+                        '층수': floor_num,
+                        '방향': article.get('direction', ''),
+                        '가격': price if transaction_type == 'SALE' else 0,
+                        '보증금': price if transaction_type == 'LEASE' else 0,
+                    }
+                    
+                    all_listings.append(listing)
+                
+                retry_count = 0  # 성공 시 리트라이 카운트 리셋
+                break  # 루프 탈출
+                
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 429:
+                    # Rate limit 에러 - 지수 백오프로 재시도
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        print(f"  ⚠ Rate limit 도달 - 최대 재시도 횟수 초과")
+                        return all_listings
+                    
+                    wait_time = base_wait * (2 ** retry_count)
+                    print(f"  ⚠ Rate limit (429) - {wait_time}초 대기 후 재시도...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"  ⚠ HTTP 오류: {e}")
+                    return all_listings
             
-            data = response.json()
-            articles = data.get('articleList', [])
-            
-            if not articles:
-                break  # 더 이상 데이터 없음
-            
-            for article in articles:
-                # 면적 확인
-                area = float(article.get('area', 0))
-                
-                # 59m² 또는 84m² 필터링 (±3m²)
-                if not (56 <= area <= 62 or 81 <= area <= 87):
-                    continue
-                
-                # 층수 확인
-                floor_info = article.get('floorInfo', '')
-                floor_num = parse_floor_number(floor_info)
-                
-                # 4층 이상만
-                if floor_num < 4:
-                    continue
-                
-                # 가격
-                price = parse_price_number(article.get('dealOrWarrantPrc', 0))
-                
-                # 면적타입
-                area_type = "59A" if area < 70 else "84A"
-                
-                listing = {
-                    '면적타입': area_type,
-                    '전용면적': area,
-                    '거래유형': transaction_type,
-                    '층': floor_info,
-                    '층수': floor_num,
-                    '방향': article.get('direction', ''),
-                    '가격': price if transaction_type == 'SALE' else 0,
-                    '보증금': price if transaction_type == 'LEASE' else 0,
-                }
-                
-                all_listings.append(listing)
-            
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 429:
-                print(f"  ⚠ Rate limit 도달 - 대기 중...")
-                time.sleep(5)
-            else:
-                print(f"  ⚠ HTTP 오류: {e}")
-            break
-        except Exception as e:
-            print(f"  ⚠ API 오류: {e}")
-            break
+            except Exception as e:
+                print(f"  ⚠ API 오류: {e}")
+                return all_listings
     
     print(f"    - {transaction_type}: {len(all_listings)}개 매물 추출")
     return all_listings

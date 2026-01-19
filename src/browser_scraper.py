@@ -109,66 +109,145 @@ class NaverRealEstateScraper:
     
     async def extract_listings(self) -> pd.DataFrame:
         """
-        매물 데이터 추출 (Tampermonkey 로직 재현)
+        매물 데이터 추출 (강건한 선택자 사용)
+        
+        특징:
+        - 여러 선택자 경로 시도 (폴백)
+        - 광고 매물 필터링
+        - 동적 콘텐츠 처리
+        - 상세한 에러 로깅
         
         Returns:
             DataFrame with columns: 면적타입, 전용면적, 거래유형, 층, 층수, 방향, 가격, 보증금, spec
         """
         try:
-            # JavaScript로 DOM에서 데이터 추출
+            # JavaScript로 DOM에서 데이터 추출 (강건한 선택자)
             listings_data = await self.page.evaluate('''
                 () => {
                     const listings = [];
-                    const articles = document.querySelectorAll('#articleListArea > div');
+                    const articles = document.querySelectorAll('#articleListArea .article-item, #articleListArea > div');
                     
-                    articles.forEach(article => {
+                    if (articles.length === 0) {
+                        console.warn('매물 엘리먼트를 찾을 수 없음');
+                        return listings;
+                    }
+                    
+                    articles.forEach((article, idx) => {
                         try {
-                            // 면적 및 층수 정보
-                            const specText = article.querySelector('.info_area .line .spec');
-                            if (!specText) return;
-                            
-                            const aptInfo = specText.innerText.split(', ');
-                            if (aptInfo.length < 2) return;
-                            
-                            const areaText = aptInfo[0];  // "103/84m²"
-                            const floorText = aptInfo[1]; // "5/10층"
-                            
-                            // 전용면적 추출
-                            const areaMatch = areaText.match(/(\\d+)m/);
-                            if (!areaMatch) return;
-                            const exclusiveArea = parseFloat(areaMatch[1]);
-                            
-                            // 거래 유형 및 가격
-                            const tradeTypeElem = article.querySelector('.price_line .type');
-                            const priceElem = article.querySelector('.price_line .price');
-                            
-                            if (!tradeTypeElem || !priceElem) return;
-                            
-                            const tradeType = tradeTypeElem.innerText.trim();
-                            const priceText = priceElem.innerText.trim();
-                            
-                            // 가격 파싱 (억/만원 → 만원)
-                            let price = 0;
-                            if (priceText.includes('억')) {
-                                const parts = priceText.replace(/,/g, '').split('억');
-                                const eok = parseInt(parts[0]) || 0;
-                                const man = parts[1] ? parseInt(parts[1].replace(/[^0-9]/g, '')) : 0;
-                                price = eok * 10000 + man;
-                            } else {
-                                price = parseInt(priceText.replace(/[^0-9]/g, '')) || 0;
+                            // 광고 매물 필터링
+                            if (article.classList.contains('ad') || article.classList.contains('sponsored')) {
+                                return;
                             }
                             
-                            // 특이사항 (세안고, 올수리 등)
-                            const specElem = article.querySelector('.info_area > p:nth-child(2) > span');
-                            const spec = specElem ? specElem.innerText.trim() : '';
+                            // 1단계: 면적 및 층수 정보 추출 (여러 경로 시도)
+                            let specText = null;
+                            let aptInfo = [];
                             
-                            // 방향 (없을 수 있음)
-                            const direction = '';
+                            // 경로 1: .info_area .line .spec
+                            specText = article.querySelector('.info_area .line .spec');
+                            if (specText) {
+                                aptInfo = specText.innerText.split(',').map(s => s.trim());
+                            }
+                            
+                            // 경로 2: .info_area 내 텍스트 파싱
+                            if (aptInfo.length < 2) {
+                                const infoArea = article.querySelector('.info_area');
+                                if (infoArea) {
+                                    const infoText = infoArea.innerText;
+                                    aptInfo = infoText.split('\\n').slice(0, 3).map(s => s.trim()).filter(s => s);
+                                }
+                            }
+                            
+                            // 경로 3: 전체 텍스트에서 정규식으로 추출
+                            if (aptInfo.length < 2) {
+                                const fullText = article.innerText;
+                                const areaMatch = fullText.match(/(\\d+\\.?\\d*)m²/);
+                                const floorMatch = fullText.match(/(\\d+)\\/\\d+층|((저|중|고)층)/);
+                                
+                                if (areaMatch) {
+                                    aptInfo = [areaMatch[0], floorMatch ? floorMatch[0] : '정보없음'];
+                                }
+                            }
+                            
+                            if (aptInfo.length < 2) {
+                                console.warn('면적/층수 정보 없음 - 스킵');
+                                return;
+                            }
+                            
+                            const areaText = aptInfo[0];      // "84m²"
+                            const floorText = aptInfo[1];     // "5/10층"
+                            
+                            // 2단계: 전용면적 추출
+                            const areaMatch = areaText.match(/(\\d+\\.?\\d*)/);
+                            if (!areaMatch) {
+                                console.warn('면적 파싱 실패:', areaText);
+                                return;
+                            }
+                            const exclusiveArea = parseFloat(areaMatch[1]);
+                            
+                            // 3단계: 거래 유형 및 가격 추출
+                            const priceLines = article.querySelectorAll('.price-line, .price_line, .price, [class*="price"]');
+                            let tradeType = '';
+                            let priceText = '';
+                            
+                            // 거래유형 찾기
+                            const tradeElem = article.querySelector('[class*="trade"], [class*="type"]');
+                            if (tradeElem) {
+                                tradeType = tradeElem.innerText.trim();
+                            }
+                            
+                            // 가격 텍스트 찾기
+                            let foundPrice = false;
+                            for (let priceElem of priceLines) {
+                                const text = priceElem.innerText?.trim() || '';
+                                if (text.match(/\\d+/) && (text.includes('억') || text.includes('만') || text.match(/^\\d+$/))) {
+                                    priceText = text;
+                                    foundPrice = true;
+                                    break;
+                                }
+                            }
+                            
+                            // 가격 못 찾으면 전체 텍스트에서 찾기
+                            if (!foundPrice) {
+                                const fullText = article.innerText;
+                                const priceMatch = fullText.match(/(\\d+억\\s*\\d*만|\\d+만|\\d+억)/);
+                                if (priceMatch) {
+                                    priceText = priceMatch[1];
+                                }
+                            }
+                            
+                            // 4단계: 가격 파싱 (억/만원 → 만원)
+                            let price = 0;
+                            if (priceText) {
+                                if (priceText.includes('억')) {
+                                    const parts = priceText.replace(/,/g, '').split('억');
+                                    const eok = parseInt(parts[0]) || 0;
+                                    const man = parts[1] ? parseInt(parts[1].replace(/[^0-9]/g, '')) : 0;
+                                    price = eok * 10000 + man;
+                                } else {
+                                    price = parseInt(priceText.replace(/[^0-9]/g, '')) || 0;
+                                }
+                            }
+                            
+                            // 5단계: 특이사항 추출
+                            let spec = '';
+                            const specElems = article.querySelectorAll('[class*="spec"], [class*="note"], .etc');
+                            for (let elem of specElems) {
+                                const text = elem.innerText?.trim();
+                                if (text && text.length > 0 && text.length < 100) {
+                                    spec = text;
+                                    break;
+                                }
+                            }
+                            
+                            // 6단계: 방향 추출
+                            const dirMatch = article.innerText.match(/([동서남북]+향|정남향|남동향|남서향)/);
+                            const direction = dirMatch ? dirMatch[1] : '';
                             
                             listings.push({
                                 area_text: areaText,
                                 exclusive_area: exclusiveArea,
-                                trade_type: tradeType,
+                                trade_type: tradeType || '정보없음',
                                 floor: floorText,
                                 price_text: priceText,
                                 price: price,
@@ -177,64 +256,83 @@ class NaverRealEstateScraper:
                             });
                             
                         } catch (e) {
-                            console.error('매물 파싱 오류:', e);
+                            console.error(`[${idx}] 매물 파싱 오류:`, e.message);
                         }
                     });
                     
+                    console.log(`총 ${listings.length}개 매물 추출 완료`);
                     return listings;
                 }
             ''')
             
             # DataFrame 변환
             if not listings_data:
-                print("⚠ 추출된 매물 없음")
+                print("⚠ 추출된 매물 없음 - JavaScript 평가 실패 또는 매물 없음")
                 return pd.DataFrame()
             
             # Python DataFrame으로 변환
             df_list = []
-            for item in listings_data:
-                # 층수 추출
-                floor_match = re.search(r'(\d+)/', item['floor'])
-                floor_num = int(floor_match.group(1)) if floor_match else 0
-                
-                # 면적 타입 결정 (59A, 84A)
-                area = item['exclusive_area']
-                if 56 <= area <= 62:
-                    area_type = '59A'
-                elif 81 <= area <= 87:
-                    area_type = '84A'
-                else:
-                    area_type = f"{int(area)}A"
-                
-                # 거래 유형 변환
-                trade_type_map = {
-                    '매매': 'SALE',
-                    '전세': 'LEASE',
-                    '월세': 'RENT'
-                }
-                trade_type = trade_type_map.get(item['trade_type'], 'SALE')
-                
-                listing = {
-                    '면적타입': area_type,
-                    '전용면적': area,
-                    '거래유형': trade_type,
-                    '층': item['floor'],
-                    '층수': floor_num,
-                    '방향': item['direction'],
-                    '가격': item['price'] if trade_type == 'SALE' else 0,
-                    '보증금': item['price'] if trade_type == 'LEASE' else 0,
-                    'spec': item['spec']
-                }
-                
-                df_list.append(listing)
+            skipped = 0
+            
+            for idx, item in enumerate(listings_data):
+                try:
+                    # 데이터 검증
+                    if not item.get('exclusive_area'):
+                        skipped += 1
+                        continue
+                    
+                    # 층수 추출
+                    floor_match = re.search(r'(\d+)', item.get('floor', ''))
+                    floor_num = int(floor_match.group(1)) if floor_match else 0
+                    
+                    # 면적 타입 결정 (59A, 84A 등)
+                    area = item['exclusive_area']
+                    if 56 <= area <= 62:
+                        area_type = '59A'
+                    elif 72 <= area <= 78:
+                        area_type = '75A'
+                    elif 81 <= area <= 87:
+                        area_type = '84A'
+                    else:
+                        area_type = f"{int(area)}A"
+                    
+                    # 거래 유형 변환
+                    trade_type_map = {
+                        '매매': 'SALE',
+                        '전세': 'LEASE',
+                        '월세': 'RENT',
+                        '정보없음': 'SALE'  # 기본값
+                    }
+                    trade_type = trade_type_map.get(item.get('trade_type', ''), 'SALE')
+                    
+                    listing = {
+                        '면적타입': area_type,
+                        '전용면적': area,
+                        '거래유형': trade_type,
+                        '층': item.get('floor', '정보없음'),
+                        '층수': floor_num,
+                        '방향': item.get('direction', ''),
+                        '가격': item.get('price', 0) if trade_type == 'SALE' else 0,
+                        '보증금': item.get('price', 0) if trade_type == 'LEASE' else 0,
+                        'spec': item.get('spec', '')
+                    }
+                    
+                    df_list.append(listing)
+                    
+                except Exception as e:
+                    print(f"  ⚠ [{idx}] 매물 처리 오류: {e}")
+                    skipped += 1
+                    continue
             
             df = pd.DataFrame(df_list)
-            print(f"✓ 매물 {len(df)}개 추출 완료")
+            print(f"✓ 매물 {len(df)}개 추출 완료" + (f" (스킵: {skipped}개)" if skipped > 0 else ""))
             
             return df
             
         except Exception as e:
             print(f"❌ 매물 추출 실패: {e}")
+            import traceback
+            traceback.print_exc()
             return pd.DataFrame()
     
     async def get_complex_info(self) -> Dict:
@@ -336,6 +434,57 @@ async def test_scraping():
     if not lease.empty:
         print(f"\n전세 매물 ({len(lease)}개):")
         print(lease[['면적타입', '전용면적', '층수', '보증금', 'spec']].head(5))
+
+
+async def scrape_complex(complex_no: str, headless: bool = True) -> Tuple[Dict, pd.DataFrame, pd.DataFrame]:
+    """
+    특정 단지의 브라우저 자동화 데이터 수집
+    main.py에서 호출하는 래퍼 함수
+    
+    Args:
+        complex_no: 단지 번호
+        headless: 헤드리스 모드 여부
+    
+    Returns:
+        (complex_info, sale_df, lease_df)
+    """
+    scraper = NaverRealEstateScraper(headless=headless)
+    
+    try:
+        await scraper.start()
+        
+        # 단지 페이지 이동
+        if not await scraper.navigate_to_complex(complex_no):
+            print(f"❌ 단지 페이지 로드 실패: {complex_no}")
+            return {}, pd.DataFrame(), pd.DataFrame()
+        
+        # 매물 리스트 스크롤
+        await scraper.scroll_article_list(max_scrolls=10)
+        
+        # 단지 정보 추출
+        complex_info = await scraper.get_complex_info()
+        
+        # 매물 데이터 추출
+        listings_df = await scraper.extract_listings()
+        
+        if listings_df.empty:
+            print(f"⚠ {complex_no}에서 추출된 매물 없음")
+            return complex_info, pd.DataFrame(), pd.DataFrame()
+        
+        # 매매/전세 분리
+        sale_df = listings_df[listings_df['거래유형'] == 'SALE'].copy()
+        lease_df = listings_df[listings_df['거래유형'] == 'LEASE'].copy()
+        
+        print(f"✓ {complex_no} 데이터 수집 완료: 매매 {len(sale_df)}개, 전세 {len(lease_df)}개")
+        
+        return complex_info, sale_df, lease_df
+        
+    except Exception as e:
+        print(f"❌ 스크래핑 중 오류: {e}")
+        return {}, pd.DataFrame(), pd.DataFrame()
+    
+    finally:
+        await scraper.close()
 
 
 if __name__ == "__main__":

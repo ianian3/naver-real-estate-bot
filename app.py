@@ -141,7 +141,7 @@ with col3:
         st.rerun()
 
 # DB 연결 (파일 업로드 전에 먼저 정의)
-@st.cache_resource
+# 캐시 제거 - 데이터 업데이트가 즉시 반영되도록 함
 def get_db():
     return RealEstateDB("data/real_estate.db")
 
@@ -263,6 +263,39 @@ else:
 st.sidebar.markdown("---")
 
 # ================================
+# 사이드바 - 데이터베이스 관리
+# ================================
+st.sidebar.header("🗄️ 데이터베이스 관리")
+
+# 현재 데이터 현황
+try:
+    db_stats_cursor = db.conn.execute("SELECT COUNT(*) FROM complexes")
+    complex_count = db_stats_cursor.fetchone()[0]
+    db_stats_cursor = db.conn.execute("SELECT COUNT(*) FROM prices")
+    price_count = db_stats_cursor.fetchone()[0]
+    st.sidebar.info(f"📊 단지: {complex_count}개 | 매물: {price_count}개")
+except:
+    st.sidebar.warning("⚠️ DB 통계 조회 실패")
+
+# 초기화 확인 체크박스와 버튼
+confirm_reset = st.sidebar.checkbox("⚠️ 정말 초기화하시겠습니까?", key="confirm_db_reset")
+
+if st.sidebar.button("🗑️ 데이터베이스 초기화", type="secondary", disabled=not confirm_reset):
+    try:
+        # 모든 가격 데이터 삭제
+        db.conn.execute("DELETE FROM prices")
+        # 모든 단지 정보 삭제
+        db.conn.execute("DELETE FROM complexes")
+        db.conn.commit()
+        st.sidebar.success("✅ 데이터베이스 초기화 완료!")
+        st.cache_data.clear()
+        st.rerun()
+    except Exception as e:
+        st.sidebar.error(f"❌ 초기화 실패: {str(e)}")
+
+st.sidebar.markdown("---")
+
+# ================================
 # 사이드바 - 파일 업로드 기능
 # ================================
 st.sidebar.header("📥 데이터 가져오기")
@@ -278,85 +311,104 @@ if uploaded_file is not None:
         # JSON 파일 읽기
         json_data = json.loads(uploaded_file.getvalue().decode('utf-8'))
         
-        # 메타데이터 추출
-        metadata = json_data.get('metadata', {})
-        complex_name = metadata.get('complex_name', 'Unknown')
-        complex_no = metadata.get('complex_no', 'unknown')
-        total_households = metadata.get('total_households', 0)
+        # 두 가지 JSON 형식 지원:
+        # 형식 1: {"metadata": {...}, "listings": [...]}
+        # 형식 2: {"metadata": {...}, "complexes": [{"metadata": {...}, "listings": [...]}]}
         
-        # 기존 데이터 삭제 (중복 방지)
-        db.conn.execute("DELETE FROM prices WHERE complex_no = ?", (complex_no,))
-        db.conn.commit()
+        if 'complexes' in json_data and isinstance(json_data['complexes'], list):
+            # 형식 2: 여러 단지가 포함된 경우
+            complexes_list = json_data['complexes']
+        else:
+            # 형식 1: 단일 단지 데이터
+            complexes_list = [json_data]
         
-        # DB에 단지 정보 저장 (UPDATE 또는 INSERT)
-        db.conn.execute("""
-            INSERT OR REPLACE INTO complexes (complex_no, complex_name, address, total_households, build_year, updated_at)
-            VALUES (?, ?, ?, ?, ?, datetime('now'))
-        """, (complex_no, complex_name, metadata.get('address', ''), total_households, 2010))
-        db.conn.commit()
-        
-        # 매물 데이터 처리
-        listings = json_data.get('listings', [])
-        sale_count = 0
-        lease_count = 0
-        
-        for listing in listings:
-            area = listing.get('exclusive_area', 0)
-            area_type = listing.get('area_type', '')  # 원본 타입명 사용 (예: 86B/59m², 111A/84m²)
+        # 각 단지 처리
+        for complex_data in complexes_list:
+            # 메타데이터 추출
+            metadata = complex_data.get('metadata', {})
+            complex_name = metadata.get('complex_name', 'Unknown')
+            complex_no = metadata.get('complex_no', 'unknown')
+            total_households = metadata.get('total_households', 0)
             
-            # 면적 필터링 (59m², 75m², 84m²)
-            if not (56 <= area <= 62 or 72 <= area <= 78 or 81 <= area <= 87):
-                continue
+            # 기존 데이터 삭제 (중복 방지)
+            db.conn.execute("DELETE FROM prices WHERE complex_no = ?", (complex_no,))
+            db.conn.commit()
             
-            # 매매 데이터
-            if listing.get('sale_price', 0) > 0 and listing.get('sale_count', 0) > 0:
-                floor_str = listing.get('sale_floor', '')
-                floor_num = 15 if '고' in floor_str else 9 if '중' in floor_str else 5 if floor_str.isdigit() else 5
+            # DB에 단지 정보 저장 (UPDATE 또는 INSERT)
+            db.conn.execute("""
+                INSERT OR REPLACE INTO complexes (complex_no, complex_name, address, total_households, build_year, updated_at)
+                VALUES (?, ?, ?, ?, ?, datetime('now'))
+            """, (complex_no, complex_name, metadata.get('address', ''), total_households, 2010))
+            db.conn.commit()
+            
+            # 매물 데이터 처리
+            listings = complex_data.get('listings', [])
+            sale_count = 0
+            lease_count = 0
+            
+            for listing in listings:
+                area = listing.get('exclusive_area', 0)
+                area_type = listing.get('area_type', '')  # 원본 타입명 사용 (예: 86B/59m², 111A/84m²)
                 
-                if floor_num >= 4:
-                    sale_df = pd.DataFrame([{
-                        '면적타입': area_type,
-                        '전용면적': area,
-                        '거래유형': 'SALE',
-                        '층': floor_str,
-                        '층수': floor_num,
-                        '방향': '',
-                        '가격': listing.get('sale_price', 0) * 10000,
-                        '보증금': 0,
-                    }])
-                    db.save_prices(sale_df, complex_no)
-                    sale_count += 1
-            
-            # 전세 데이터
-            if listing.get('lease_price', 0) > 0 and listing.get('lease_count', 0) > 0:
-                floor_str = listing.get('lease_floor', '')
-                floor_num = 15 if '고' in floor_str else 9 if '중' in floor_str else 5 if floor_str.isdigit() else 5
+                # 면적 필터링 (59m², 75m², 84m²)
+                if not (56 <= area <= 62 or 72 <= area <= 78 or 81 <= area <= 87):
+                    continue
                 
-                if floor_num >= 4:
-                    lease_df = pd.DataFrame([{
-                        '면적타입': area_type,
-                        '전용면적': area,
-                        '거래유형': 'LEASE',
-                        '층': floor_str,
-                        '층수': floor_num,
-                        '방향': '',
-                        '가격': 0,
-                        '보증금': listing.get('lease_price', 0) * 10000,
-                    }])
-                    db.save_prices(lease_df, complex_no)
-                    lease_count += 1
+                # 매매 데이터 - count 값을 int로 변환하여 비교
+                sale_price_val = listing.get('sale_price', 0)
+                sale_count_val = int(listing.get('sale_count', 0)) if str(listing.get('sale_count', 0)).isdigit() else 0
+                
+                if sale_price_val > 0 and sale_count_val > 0:
+                    floor_str = listing.get('sale_floor', '')
+                    floor_num = 15 if '고' in floor_str else 9 if '중' in floor_str else 5
+                    
+                    if floor_num >= 4:
+                        sale_df = pd.DataFrame([{
+                            '면적타입': area_type,
+                            '전용면적': area,
+                            '거래유형': 'SALE',
+                            '층': floor_str,
+                            '층수': floor_num,
+                            '방향': '',
+                            '가격': sale_price_val,  # 이미 만원 단위
+                            '보증금': 0,
+                        }])
+                        db.save_prices(sale_df, complex_no)
+                        sale_count += 1
+                
+                # 전세 데이터 - count 값을 int로 변환하여 비교
+                lease_price_val = listing.get('lease_price', 0)
+                lease_count_val = int(listing.get('lease_count', 0)) if str(listing.get('lease_count', 0)).isdigit() else 0
+                
+                if lease_price_val > 0 and lease_count_val > 0:
+                    floor_str = listing.get('lease_floor', '')
+                    floor_num = 15 if '고' in floor_str else 9 if '중' in floor_str else 5
+                    
+                    if floor_num >= 4:
+                        lease_df = pd.DataFrame([{
+                            '면적타입': area_type,
+                            '전용면적': area,
+                            '거래유형': 'LEASE',
+                            '층': floor_str,
+                            '층수': floor_num,
+                            '방향': '',
+                            '가격': 0,
+                            '보증금': lease_price_val,  # 이미 만원 단위
+                        }])
+                        db.save_prices(lease_df, complex_no)
+                        lease_count += 1
+            
+            st.sidebar.success(f"✅ {complex_name} 가져오기 성공!")
+            st.sidebar.info(f"매매 {sale_count}개, 전세 {lease_count}개")
         
-        st.sidebar.success(f"✅ {complex_name} 가져오기 성공!")
-        st.sidebar.info(f"매매 {sale_count}개, 전세 {lease_count}개")
-        
-        # 캐시 클리어하여 데이터 새로고침
+        # 캐시 클리어 및 즉시 새로고침
         st.cache_data.clear()
-        st.success("데이터가 업데이트되었습니다! 잠시 후 자동으로 새로고침됩니다...")
-        time.sleep(1)
+        st.success("✅ 데이터가 업데이트되었습니다! 페이지를 새로고침합니다...")
         st.rerun()
         
     except Exception as e:
         st.sidebar.error(f"❌ 오류: {str(e)}")
+        st.error(f"상세 오류: {str(e)}")
 
 st.sidebar.divider()
 
@@ -380,39 +432,54 @@ st.sidebar.markdown("---")
 # 메인 영역 - 데이터 로드 및 필터링
 # ================================
 
-# 데이터 로드 함수
-@st.cache_data(ttl=60)
-def load_formatted_data():
+def load_formatted_data(complex_no=None):
+    """데이터 로드 (항상 새 DB 연결로 최신 데이터 반영)"""
+    # 매번 새로운 DB 연결을 생성하여 최신 데이터 보장
+    fresh_db = RealEstateDB("data/real_estate.db")
+    
+    query = """
+    SELECT 
+        c.complex_no,
+        c.complex_name as 아파트명,
+        c.address as 주소,
+        c.total_households as 세대수,
+        c.build_year as 연식,
+        p.area_type as 면적타입,
+        p.exclusive_area as 면적_m2,
+        CASE 
+            WHEN p.transaction_type = 'SALE' THEN ROUND(p.price / 10000.0, 2)
+            ELSE 0
+        END as 매매가_억,
+        CASE 
+            WHEN p.transaction_type = 'LEASE' THEN ROUND(p.deposit / 10000.0, 2)
+            ELSE 0
+        END as 전세가_억,
+        p.transaction_type as 거래유형,
+        p.floor,
+        p.floor_number as 층수,
+        p.direction as 방향,
+        p.collected_at,
+        CASE p.transaction_type WHEN 'SALE' THEN '매매' WHEN 'LEASE' THEN '전세' ELSE '기타' END as 타입
+    FROM prices p
+    JOIN complexes c ON p.complex_no = c.complex_no
+    """
+    
+    params = []
+    
+    # 특정 단지 필터링
+    if complex_no:
+        query += " WHERE c.complex_no = ?"
+        params.append(complex_no)
+    
+    query += " ORDER BY c.complex_name, p.area_type, p.transaction_type"
+    
     try:
-        query = """
-        SELECT 
-            c.complex_name as 아파트명,
-            c.complex_no as complex_no,
-            c.total_households as 세대수,
-            c.build_year as 건축년도,
-            (2026 - c.build_year) as 연식,
-            p.area_type as 타입,
-            p.exclusive_area as 면적_m2,
-            CASE 
-                WHEN p.transaction_type = 'SALE' THEN ROUND(p.price / 100000000.0, 2)
-                ELSE 0
-            END as 매매가_억,
-            CASE 
-                WHEN p.transaction_type = 'LEASE' THEN ROUND(p.deposit / 100000000.0, 2)
-                ELSE 0
-            END as 전세가_억,
-            p.transaction_type,
-            p.floor,
-            p.floor_number as 층수,
-            p.direction as 방향,
-            p.collected_at
-        FROM prices p
-        JOIN complexes c ON p.complex_no = c.complex_no
-        ORDER BY c.complex_name, p.area_type, p.transaction_type
-        """
-        return pd.read_sql_query(query, db.conn)
+        result = pd.read_sql_query(query, fresh_db.conn, params=params)
+        fresh_db.close()  # 연결 종료
+        return result
     except Exception as e:
-        # DB가 비어있거나 오류 발생 시 빈 DataFrame 반환
+        print(f"데이터 로드 오류: {e}")
+        fresh_db.close()
         return pd.DataFrame()
 
 # 데이터 로드
@@ -473,9 +540,9 @@ st.sidebar.caption("ℹ️ 필터는 새 데이터 수집 시 적용됩니다")
 filtered_df = df.copy()
 
 if selected_type == "매매만":
-    filtered_df = filtered_df[filtered_df['transaction_type'] == 'SALE']
+    filtered_df = filtered_df[filtered_df['거래유형'] == 'SALE']
 elif selected_type == "전세만":
-    filtered_df = filtered_df[filtered_df['transaction_type'] == 'LEASE']
+    filtered_df = filtered_df[filtered_df['거래유형'] == 'LEASE']
 
 if selected_area != "전체":
     if "59" in selected_area:
@@ -492,11 +559,11 @@ with col1:
     st.metric("총 매물 수", f"{len(filtered_df):,}개")
 
 with col2:
-    sale_count = len(filtered_df[filtered_df['transaction_type'] == 'SALE'])
+    sale_count = len(filtered_df[filtered_df['거래유형'] == 'SALE'])
     st.metric("매매", f"{sale_count:,}개")
 
 with col3:
-    lease_count = len(filtered_df[filtered_df['transaction_type'] == 'LEASE'])
+    lease_count = len(filtered_df[filtered_df['거래유형'] == 'LEASE'])
     st.metric("전세", f"{lease_count:,}개")
 
 with col4:
@@ -511,9 +578,8 @@ tab1, tab2, tab3, tab4 = st.tabs(["📋 매물 리스트", "📊 가격 분석",
 with tab1:
     st.subheader("📋 매물 목록 (사용자 요청 컬럼)")
     
-    # 거래유형 표시
+    # 거래유형이 이미 별칭으로 있으므로 추가 변환 불필요
     display_df = filtered_df.copy()
-    display_df['거래유형'] = display_df['transaction_type'].map({'SALE': '매매', 'LEASE': '전세'})
     
     # 사용자가 요청한 컬럼 순서대로 표시
     display_cols = ['아파트명', '세대수', '연식', '면적_m2', '매매가_억', '전세가_억', '타입', '층수', 'floor', '방향']
@@ -660,12 +726,11 @@ with tab3:
     apt_stats = filtered_df.groupby('아파트명').agg({
         '세대수': 'first',
         '연식': 'first',
-        '건축년도': 'first',
         '매매가_억': lambda x: f"{x[x>0].mean():.1f}" if (x>0).any() else "-",
         '전세가_억': lambda x: f"{x[x>0].mean():.1f}" if (x>0).any() else "-",
     }).reset_index()
     
-    apt_stats.columns = ['아파트명', '세대수', '연식', '건축년도', '평균매매가(억)', '평균전세가(억)']
+    apt_stats.columns = ['아파트명', '세대수', '연식', '평균매매가(억)', '평균전세가(억)']
     
     st.dataframe(
         apt_stats,
@@ -693,7 +758,6 @@ with tab4:
     
     # Export용 데이터프레임
     export_df = filtered_df.copy()
-    export_df['거래유형'] = export_df['transaction_type'].map({'SALE': '매매', 'LEASE': '전세'})
     
     # 컬럼 선택 및 순서 지정
     export_cols = ['아파트명', '세대수', '연식', '면적_m2', '매매가_억', '전세가_억', '타입', '거래유형', '층수', 'floor', '방향']
