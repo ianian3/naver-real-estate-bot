@@ -55,25 +55,32 @@ if 'pending_upload_check' not in st.session_state:
 # 사용자 인증 (쿠키 기반 세션 유지)
 # ================================
 
-# 쿠키 매니저 초기화
-cookie_manager = stx.CookieManager()
+# 쿠키 매니저 초기화 (key 지정으로 안정성 향상)
+cookie_manager = stx.CookieManager(key="auth_cookie_manager")
 
 # 세션 상태 초기화
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 if 'user' not in st.session_state:
     st.session_state.user = None
+if 'login_checked' not in st.session_state:
+    st.session_state.login_checked = False
 
 user_manager = UserManager()
 
-# 쿠키에서 자동 로그인 시도 (페이지 로드 시)
-if not st.session_state.authenticated:
-    saved_username = cookie_manager.get('username')
+# 쿠키에서 자동 로그인 시도 (페이지 로드 시 한 번만)
+if not st.session_state.authenticated and not st.session_state.login_checked:
+    st.session_state.login_checked = True
+    # 모든 쿠키 가져오기
+    cookies = cookie_manager.get_all()
+    saved_username = cookies.get('session_username') if cookies else None
+    
     if saved_username:
         user = user_manager.get_user_by_username(saved_username)
         if user:
             st.session_state.authenticated = True
             st.session_state.user = user
+            st.rerun()
 
 # 로그인되지 않은 경우
 if not st.session_state.authenticated:
@@ -91,8 +98,9 @@ if not st.session_state.authenticated:
             if user:
                 st.session_state.authenticated = True
                 st.session_state.user = user
+                st.session_state.login_checked = True
                 # 쿠키에 사용자명 저장 (30일 유지)
-                cookie_manager.set('username', login_username, expires_at=datetime.now() + pd.Timedelta(days=30))
+                cookie_manager.set('session_username', login_username, expires_at=datetime.now() + pd.Timedelta(days=30))
                 st.success(f"환영합니다, {user['username']}님!")
                 st.rerun()
             else:
@@ -136,8 +144,9 @@ with col3:
     if st.button("🚪 로그아웃"):
         st.session_state.authenticated = False
         st.session_state.user = None
+        st.session_state.login_checked = False
         # 쿠키 삭제
-        cookie_manager.delete('username')
+        cookie_manager.delete('session_username')
         st.rerun()
 
 # DB 연결 (파일 업로드 전에 먼저 정의)
