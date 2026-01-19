@@ -1,12 +1,16 @@
 // ==UserScript==
-// @name        부동산 매물 가격 필터 for 월부_Upgrade / addClickFnc / shinhoLightFnc + JSON Export
-// @namespace   Violentmonkey Scripts
+// @name        네이버 부동산 분석 도우미 (Naver Real Estate Analyzer)
+// @namespace   https://github.com/ianian3/naver-real-estate-bot
 // @match       https://new.land.naver.com/complexes*
-// @version     2.0
-// @author      모느나 + Python Integration
-// @description Naver Real Estate Full Features + JSON Export
+// @version     2.1
+// @author      ianian3
+// @description 네이버 부동산 가격 필터링 + JSON 내보내기 기능
+// @homepage    https://github.com/ianian3/naver-real-estate-bot
+// @updateURL   https://raw.githubusercontent.com/ianian3/naver-real-estate-bot/main/tampermonkey_export.user.js
+// @downloadURL https://raw.githubusercontent.com/ianian3/naver-real-estate-bot/main/tampermonkey_export.user.js
 // @require     https://code.jquery.com/jquery-1.12.4.min.js
 // @require     https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.10/clipboard.min.js
+// @grant       none
 // ==/UserScript==
 
 
@@ -253,7 +257,7 @@ function getPrice_WeolbuStandard() {
     // 데이터 수집할 요소들 찾기
     const articleListArea = document.querySelector("#articleListArea");
     console.log('articleListArea 요소:', articleListArea);
-    
+
     if (!articleListArea) {
         console.log('⚠️ articleListArea를 찾을 수 없습니다');
         return result;
@@ -270,22 +274,22 @@ function getPrice_WeolbuStandard() {
                 console.log(`[${idx}] spec 요소 없음`);
                 return;
             }
-            
+
             let aptInfo = specElements[0].innerText.split(", ");
             let size = aptInfo[0];
             let floor = aptInfo[1];
-            
+
             const typeElement = ele.querySelector("div.price_line .type");
             const priceElement = ele.querySelector("div.price_line .price");
-            
+
             if (!typeElement || !priceElement) {
-                console.log(`[${idx}] 가격 정보 없음`, {size, floor});
+                console.log(`[${idx}] 가격 정보 없음`, { size, floor });
                 return;
             }
-            
+
             let tradeType = typeElement.innerText;
             let tradePrice = parsePrice(priceElement.innerText);
-            
+
             // spec 정보 추출
             let specSpans = ele.querySelectorAll("div.info_area > p:nth-child(2) > span");
             let spec = specSpans.length > 0 ? specSpans[0].innerText : "";
@@ -695,15 +699,15 @@ function saveToLocalStorage() {
 
     // 면적별 가격 데이터 변환
     console.log('Tampermonkey: priceData =', priceData);
-    
+
     for (const areaKey in priceData) {
         const data = priceData[areaKey];
         console.log(`Processing area: ${areaKey}, data:`, data);
-        
+
         // 데이터가 없거나 가격 정보가 없으면 스킵
         if (!data) continue;
         if (!data['매매'] && !data['전세']) continue;
-        
+
         complexData.listings.push({
             area_type: areaKey,
             exclusive_area: data['전용면적'] || extractAreaFromKey(areaKey),
@@ -717,7 +721,7 @@ function saveToLocalStorage() {
             lease_rate: data['전세가율'] || '-'
         });
     }
-    
+
     console.log('Tampermonkey: Final listings =', complexData.listings);
 
     // 기존 저장된 데이터 가져오기
