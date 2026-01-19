@@ -579,7 +579,7 @@ with col4:
 st.divider()
 
 # 탭 생성
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 매물 리스트", "📊 가격 분석", "📈 가격 추이", "🏢 아파트별 통계", "💾 내보내기"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📋 매물 리스트", "📊 가격 분석", "📈 가격 추이", "🏢 아파트별 통계", "💾 내보내기", "🎯 저환수원리"])
 
 with tab1:
     st.subheader("📋 매물 목록 (사용자 요청 컬럼)")
@@ -952,3 +952,241 @@ with col2:
     st.caption(f"🏢 총 {df['아파트명'].nunique()}개 아파트")
 with col3:
     st.caption(f"📊 총 {len(df):,}개 매물")
+
+# ================================
+# Tab 6: 저환수원리 분석
+# ================================
+with tab6:
+    st.subheader("🎯 저환수원리 분석")
+    st.caption("월급쟁이부자들 투자 기준으로 매물을 분석해보세요.")
+    
+    # 분석 대상 단지 정보
+    st.markdown("### 🏠 분석 대상 단지")
+    target_col1, target_col2 = st.columns(2)
+    with target_col1:
+        target_name = st.text_input("단지명", placeholder="예: 개포자이 84A", key="target_name")
+    with target_col2:
+        target_area = st.selectbox("면적", ["59m²", "75m²", "84m²"], key="target_area")
+    
+    st.divider()
+    
+    # ========== 저평가 ==========
+    st.markdown("### 🟢 저 (저평가) - 비슷한 가치 단지 5개 비교")
+    st.caption("동일 생활권/비슷한 조건의 단지 시세를 입력하세요 (만원 단위)")
+    
+    compare_data = []
+    cols = st.columns(5)
+    for i in range(5):
+        with cols[i]:
+            st.markdown(f"**단지 {i+1}**")
+            name = st.text_input("단지명", key=f"comp_name_{i}", placeholder=f"단지{i+1}")
+            sale = st.number_input("매매가(만원)", key=f"comp_sale_{i}", min_value=0, step=1000)
+            lease = st.number_input("전세가(만원)", key=f"comp_lease_{i}", min_value=0, step=1000)
+            if sale > 0:
+                compare_data.append({'name': name or f'단지{i+1}', 'sale': sale, 'lease': lease})
+    
+    # 대상 단지 가격
+    st.markdown("**🎯 대상 단지 가격**")
+    tcol1, tcol2 = st.columns(2)
+    with tcol1:
+        target_sale = st.number_input("대상 매매가(만원)", key="target_sale", min_value=0, step=1000)
+    with tcol2:
+        target_lease = st.number_input("대상 전세가(만원)", key="target_lease", min_value=0, step=1000)
+    
+    # 저평가 계산
+    underval_score = 50  # 기본값
+    underval_comment = ""
+    if compare_data and target_sale > 0:
+        avg_compare_sale = sum(c['sale'] for c in compare_data) / len(compare_data)
+        deviation = ((target_sale - avg_compare_sale) / avg_compare_sale) * 100
+        
+        if deviation < -10:
+            underval_score = 90
+            underval_comment = f"🟢 주변 대비 {abs(deviation):.1f}% 저렴 (매우 좋음)"
+        elif deviation < -5:
+            underval_score = 70
+            underval_comment = f"🟢 주변 대비 {abs(deviation):.1f}% 저렴 (좋음)"
+        elif deviation < 0:
+            underval_score = 55
+            underval_comment = f"🟡 주변 대비 {abs(deviation):.1f}% 저렴 (보통)"
+        else:
+            underval_score = 35
+            underval_comment = f"🔴 주변 대비 {deviation:.1f}% 비쌈 (주의)"
+    
+    st.divider()
+    
+    # ========== 환금성 ==========
+    st.markdown("### 🟡 환 (환금성) - 팔리는 매물인가?")
+    
+    hcol1, hcol2 = st.columns(2)
+    with hcol1:
+        is_large_complex = st.checkbox("✅ 300세대 이상 단지", value=True, key="large_complex")
+        is_brand = st.checkbox("✅ 대형 브랜드 (자이, 래미안 등)", value=False, key="brand")
+        is_subway = st.checkbox("✅ 역세권 (도보 10분 이내)", value=False, key="subway")
+    
+    with hcol2:
+        exclude_low = st.checkbox("✅ 1~3층 저층 제외 매물", value=True, key="exclude_low")
+        exclude_top = st.checkbox("✅ 탑층 제외 매물", value=True, key="exclude_top")
+        is_south = st.checkbox("✅ 남향/남동향", value=False, key="south")
+    
+    # 환금성 점수 계산
+    liquidity_score = 40
+    if is_large_complex: liquidity_score += 20
+    if is_brand: liquidity_score += 15
+    if is_subway: liquidity_score += 10
+    if exclude_low: liquidity_score += 5
+    if exclude_top: liquidity_score += 5
+    if is_south: liquidity_score += 5
+    liquidity_score = min(liquidity_score, 100)
+    
+    st.divider()
+    
+    # ========== 수익률 ==========
+    st.markdown("### 🟢 수 (수익률) - 투자금 대비 수익")
+    
+    rcol1, rcol2, rcol3 = st.columns(3)
+    with rcol1:
+        expected_peak = st.number_input("예상 전고점(만원)", key="expected_peak", min_value=0, step=1000,
+                                        help="이 단지가 도달할 수 있는 예상 최고가")
+    with rcol2:
+        if target_sale > 0 and target_lease > 0:
+            gap = target_sale - target_lease
+            st.metric("투자금 (갭)", f"{gap/10000:.1f}억")
+        else:
+            gap = 0
+            st.metric("투자금 (갭)", "-")
+    with rcol3:
+        if expected_peak > 0 and target_sale > 0 and gap > 0:
+            upside = expected_peak - target_sale
+            roi = (upside / gap) * 100
+            st.metric("예상 수익률", f"{roi:.0f}%", f"+{upside/10000:.1f}억")
+        else:
+            roi = 0
+            st.metric("예상 수익률", "-")
+    
+    # 수익률 점수
+    if roi >= 100:
+        return_score = 90
+    elif roi >= 50:
+        return_score = 70
+    elif roi >= 20:
+        return_score = 50
+    else:
+        return_score = 30
+    
+    st.divider()
+    
+    # ========== 원금보존 ==========
+    st.markdown("### 🟡 원 (원금보존) - 전세가율 분석")
+    
+    if target_sale > 0 and target_lease > 0:
+        lease_ratio = (target_lease / target_sale) * 100
+        
+        if lease_ratio <= 60:
+            principal_score = 90
+            principal_comment = "🟢 매우 안전 - 역전세 위험 낮음"
+        elif lease_ratio <= 70:
+            principal_score = 70
+            principal_comment = "🟢 안전 - 적정 전세가율"
+        elif lease_ratio <= 80:
+            principal_score = 50
+            principal_comment = "🟡 주의 - 전세가율 다소 높음"
+        else:
+            principal_score = 30
+            principal_comment = "🔴 위험 - 역전세 가능성 있음"
+        
+        st.metric("전세가율", f"{lease_ratio:.1f}%")
+        st.caption(principal_comment)
+    else:
+        principal_score = 50
+        st.info("매매가/전세가를 입력하면 자동 계산됩니다")
+    
+    st.divider()
+    
+    # ========== 리스크 ==========
+    st.markdown("### 🔴 리 (리스크 관리) - 입주물량 & 연식")
+    
+    riskcol1, riskcol2 = st.columns(2)
+    with riskcol1:
+        supply_grade = st.selectbox(
+            "향후 1년 입주물량",
+            options=["S: 입주 거의 없음", "A: 적음", "B: 보통", "C: 많음 (주의)"],
+            key="supply_grade"
+        )
+    with riskcol2:
+        build_age = st.number_input("연식 (년)", min_value=0, max_value=50, value=10, key="build_age")
+    
+    # 리스크 점수
+    supply_scores = {"S: 입주 거의 없음": 25, "A: 적음": 15, "B: 보통": 5, "C: 많음 (주의)": -10}
+    risk_score = 50 + supply_scores.get(supply_grade, 0)
+    
+    # 연식 보너스
+    if 5 <= build_age <= 15:
+        risk_score += 20  # 최적 연식
+    elif build_age < 5:
+        risk_score += 10  # 신축
+    elif build_age >= 30:
+        risk_score += 15  # 재건축 기대
+    
+    risk_score = max(min(risk_score, 100), 0)
+    
+    st.divider()
+    
+    # ========== 종합 결과 ==========
+    st.markdown("### 🏆 종합 분석 결과")
+    
+    # 가중 평균
+    weights = {'저': 0.25, '환': 0.15, '수': 0.20, '원': 0.25, '리': 0.15}
+    scores = {
+        '저': underval_score,
+        '환': liquidity_score,
+        '수': return_score,
+        '원': principal_score,
+        '리': risk_score
+    }
+    total_score = sum(scores[k] * weights[k] for k in weights)
+    
+    # 등급 산정
+    if total_score >= 80:
+        grade = "⭐⭐⭐⭐⭐"
+        recommendation = "적극 추천"
+        grade_color = "green"
+    elif total_score >= 65:
+        grade = "⭐⭐⭐⭐☆"
+        recommendation = "투자 고려"
+        grade_color = "blue"
+    elif total_score >= 50:
+        grade = "⭐⭐⭐☆☆"
+        recommendation = "신중 검토"
+        grade_color = "orange"
+    else:
+        grade = "⭐⭐☆☆☆"
+        recommendation = "투자 주의"
+        grade_color = "red"
+    
+    # 결과 카드
+    result_cols = st.columns(5)
+    labels = ['저평가', '환금성', '수익률', '원금보존', '리스크']
+    keys = ['저', '환', '수', '원', '리']
+    for i, (label, key) in enumerate(zip(labels, keys)):
+        with result_cols[i]:
+            score = scores[key]
+            emoji = "🟢" if score >= 70 else "🟡" if score >= 50 else "🔴"
+            st.metric(f"{emoji} {label}", f"{score}점")
+    
+    # 총점
+    st.markdown(f"""
+    <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 15px; margin: 20px 0;">
+        <h2 style="color: white; margin: 0;">{target_name or '대상 단지'}</h2>
+        <h1 style="color: white; font-size: 3rem; margin: 10px 0;">{grade}</h1>
+        <h3 style="color: white; margin: 0;">종합 {total_score:.0f}점 - {recommendation}</h3>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # 상세 코멘트
+    with st.expander("📝 상세 분석 코멘트"):
+        st.write(f"**저평가**: {underval_comment if underval_comment else '비교 데이터 입력 필요'}")
+        st.write(f"**환금성**: 선택된 조건 {sum([is_large_complex, is_brand, is_subway, exclude_low, exclude_top, is_south])}개 충족")
+        st.write(f"**수익률**: 투자금 대비 예상 수익률 {roi:.0f}%" if roi > 0 else "**수익률**: 데이터 입력 필요")
+        st.write(f"**원금보존**: {principal_comment if target_sale > 0 else '데이터 입력 필요'}")
+        st.write(f"**리스크**: 입주물량 {supply_grade.split(':')[0]}등급, {build_age}년차")
