@@ -551,6 +551,66 @@
     }
 
     // ========================================
+    // 토스트 알림 함수 (alert 대체)
+    // ========================================
+    function showToast(message, type = 'success', duration = 3000) {
+        // 기존 토스트 제거
+        const existingToast = document.getElementById('weolbu-toast');
+        if (existingToast) existingToast.remove();
+
+        const toast = document.createElement('div');
+        toast.id = 'weolbu-toast';
+
+        const bgColor = type === 'success' ? '#4CAF50' :
+            type === 'error' ? '#f44336' :
+                type === 'warning' ? '#ff9800' : '#2196F3';
+
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: ${bgColor};
+            color: white;
+            padding: 16px 32px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            z-index: 999999;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            animation: slideIn 0.3s ease;
+            white-space: pre-line;
+            text-align: center;
+            max-width: 400px;
+        `;
+
+        // 애니메이션 CSS 추가
+        if (!document.getElementById('weolbu-toast-styles')) {
+            const style = document.createElement('style');
+            style.id = 'weolbu-toast-styles';
+            style.textContent = `
+                @keyframes slideIn {
+                    from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+                    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+                }
+                @keyframes slideOut {
+                    from { opacity: 1; transform: translateX(-50%) translateY(0); }
+                    to { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        toast.textContent = message;
+        document.body.appendChild(toast);
+
+        setTimeout(() => {
+            toast.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => toast.remove(), 300);
+        }, duration);
+    }
+
+    // ========================================
     // JSON 내보내기 기능
     // ========================================
 
@@ -620,10 +680,10 @@
 
         if (existingIndex >= 0) {
             savedData[existingIndex] = complexData;
-            alert(`✅ "${complexName}" 데이터 업데이트 완료!\n\n저장된 아파트: ${savedData.length}개`);
+            showToast(`✅ "${complexName}" 데이터 업데이트 완료!\n저장된 아파트: ${savedData.length}개`);
         } else {
             savedData.push(complexData);
-            alert(`✅ "${complexName}" 데이터 저장 완료!\n\n저장된 아파트: ${savedData.length}개`);
+            showToast(`✅ "${complexName}" 데이터 저장 완료!\n저장된 아파트: ${savedData.length}개`);
         }
 
         localStorage.setItem('naver_real_estate_data', JSON.stringify(savedData));
@@ -634,7 +694,7 @@
         const storedData = localStorage.getItem('naver_real_estate_data');
 
         if (!storedData) {
-            alert('❌ 저장된 데이터가 없습니다.\n먼저 "💾 저장" 버튼으로 아파트 데이터를 저장하세요.');
+            showToast('❌ 저장된 데이터가 없습니다.\n먼저 "💾 저장" 버튼으로 아파트 데이터를 저장하세요.', 'error');
             return;
         }
 
@@ -642,12 +702,12 @@
         try {
             savedData = JSON.parse(storedData);
         } catch (e) {
-            alert('❌ 저장된 데이터 파싱 오류');
+            showToast('❌ 저장된 데이터 파싱 오류', 'error');
             return;
         }
 
         if (savedData.length === 0) {
-            alert('❌ 저장된 데이터가 없습니다.');
+            showToast('❌ 저장된 데이터가 없습니다.', 'error');
             return;
         }
 
@@ -670,14 +730,14 @@
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
 
-        alert(`✅ 전체 데이터 내보내기 완료!\n\n총 ${savedData.length}개 아파트 데이터`);
+        showToast(`✅ 전체 데이터 내보내기 완료!\n총 ${savedData.length}개 아파트 데이터`);
     }
 
     function clearSavedData() {
         if (confirm('⚠️ 저장된 모든 데이터를 삭제하시겠습니까?')) {
             localStorage.removeItem('naver_real_estate_data');
             updateSavedCount();
-            alert('✅ 저장된 데이터가 모두 삭제되었습니다.');
+            showToast('✅ 저장된 데이터가 모두 삭제되었습니다.');
         }
     }
 
