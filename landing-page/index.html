@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="네이버 부동산 가격 분석 자동화 도구 - 면적별 시세 요약, 저평가 매물 탐지, 갭투자 분석">
+    <meta name="keywords" content="네이버 부동산, 부동산 분석, 갭투자, 전세가율, 아파트 시세">
+    <title>네이버 부동산 분석 도우미 | 스마트한 부동산 투자의 시작</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #4F46E5;
+            --primary-dark: #3730A3;
+            --secondary: #10B981;
+            --accent: #F59E0B;
+            --dark: #1F2937;
+            --gray: #6B7280;
+            --light: #F3F4F6;
+            --white: #FFFFFF;
+        }
+
+        body {
+            font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+            color: var(--dark);
+            line-height: 1.6;
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            z-index: 1000;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.05);
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: var(--gray);
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary);
+        }
+
+        .nav-cta {
+            background: var(--primary);
+            color: white !important;
+            padding: 0.5rem 1.5rem;
+            border-radius: 8px;
+        }
+
+        .nav-cta:hover {
+            background: var(--primary-dark);
+        }
+
+        /* Hero Section */
+        .hero {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            padding: 6rem 2rem 4rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="rgba(255,255,255,0.03)"/></svg>');
+            background-size: 50px;
+        }
+
+        .hero-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero-content {
+            color: white;
+        }
+
+        .hero-badge {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 0.5rem 1rem;
+            border-radius: 50px;
+            font-size: 0.875rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .hero h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            line-height: 1.2;
+            margin-bottom: 1.5rem;
+        }
+
+        .hero p {
+            font-size: 1.25rem;
+            opacity: 0.9;
+            margin-bottom: 2rem;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.3s;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-primary {
+            background: white;
+            color: var(--primary);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        .hero-image {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 2rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .hero-image img {
+            width: 100%;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Mock Screenshot */
+        .mock-screen {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .mock-header {
+            background: #f1f1f1;
+            padding: 0.75rem 1rem;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .mock-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .mock-dot.red {
+            background: #ff5f57;
+        }
+
+        .mock-dot.yellow {
+            background: #ffbd2e;
+        }
+
+        .mock-dot.green {
+            background: #28ca41;
+        }
+
+        .mock-content {
+            padding: 1.5rem;
+            min-height: 300px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        }
+
+        .mock-card {
+            background: white;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .mock-title {
+            font-weight: 600;
+            color: var(--dark);
+            margin-bottom: 0.5rem;
+        }
+
+        .mock-stats {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.875rem;
+        }
+
+        .mock-stat {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .mock-stat.sale {
+            color: #dc3545;
+        }
+
+        .mock-stat.lease {
+            color: #0d6efd;
+        }
+
+        .mock-stat.gap {
+            color: var(--secondary);
+        }
+
+        /* Features Section */
+        .features {
+            padding: 6rem 2rem;
+            background: var(--white);
+        }
+
+        .section-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .section-header h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: var(--dark);
+        }
+
+        .section-header p {
+            font-size: 1.125rem;
+            color: var(--gray);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .feature-card {
+            background: var(--light);
+            padding: 2rem;
+            border-radius: 16px;
+            transition: all 0.3s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        .feature-icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .feature-card h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+
+        .feature-card p {
+            color: var(--gray);
+            font-size: 0.95rem;
+        }
+
+        /* How It Works */
+        .how-it-works {
+            padding: 6rem 2rem;
+            background: var(--light);
+        }
+
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .step {
+            text-align: center;
+            position: relative;
+        }
+
+        .step-number {
+            width: 50px;
+            height: 50px;
+            background: var(--primary);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin: 0 auto 1.5rem;
+        }
+
+        .step h3 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+
+        .step p {
+            color: var(--gray);
+            font-size: 0.95rem;
+        }
+
+        /* Pricing */
+        .pricing {
+            padding: 6rem 2rem;
+            background: var(--white);
+        }
+
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .pricing-card {
+            background: var(--white);
+            border: 2px solid var(--light);
+            border-radius: 20px;
+            padding: 2.5rem;
+            text-align: center;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .pricing-card.popular {
+            border-color: var(--primary);
+            transform: scale(1.05);
+        }
+
+        .pricing-card.popular::before {
+            content: '추천';
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--primary);
+            color: white;
+            padding: 0.25rem 1rem;
+            border-radius: 50px;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        .pricing-card:hover {
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        .pricing-name {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--gray);
+            margin-bottom: 0.5rem;
+        }
+
+        .pricing-price {
+            font-size: 3rem;
+            font-weight: 700;
+            color: var(--dark);
+            margin-bottom: 0.25rem;
+        }
+
+        .pricing-period {
+            font-size: 0.875rem;
+            color: var(--gray);
+            margin-bottom: 1.5rem;
+        }
+
+        .pricing-features {
+            list-style: none;
+            text-align: left;
+            margin-bottom: 2rem;
+        }
+
+        .pricing-features li {
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--light);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .pricing-features li::before {
+            content: '✓';
+            color: var(--secondary);
+            font-weight: 700;
+        }
+
+        .pricing-btn {
+            width: 100%;
+            padding: 1rem;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .pricing-btn.primary {
+            background: var(--primary);
+            color: white;
+            border: none;
+        }
+
+        .pricing-btn.primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .pricing-btn.outline {
+            background: transparent;
+            color: var(--primary);
+            border: 2px solid var(--primary);
+        }
+
+        .pricing-btn.outline:hover {
+            background: var(--primary);
+            color: white;
+        }
+
+        /* CTA Section */
+        .cta {
+            padding: 6rem 2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            text-align: center;
+            color: white;
+        }
+
+        .cta h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .cta p {
+            font-size: 1.25rem;
+            opacity: 0.9;
+            margin-bottom: 2rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        /* Footer */
+        footer {
+            background: var(--dark);
+            color: white;
+            padding: 3rem 2rem;
+            text-align: center;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .footer-links a:hover {
+            color: white;
+        }
+
+        .footer-copyright {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.875rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero-container {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+
+            .hero h1 {
+                font-size: 2rem;
+            }
+
+            .hero-buttons {
+                justify-content: center;
+            }
+
+            .hero-image {
+                display: none;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .section-header h2 {
+                font-size: 2rem;
+            }
+
+            .pricing-card.popular {
+                transform: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Navigation -->
+    <nav>
+        <div class="nav-container">
+            <div class="logo">🏢 부동산분석</div>
+            <ul class="nav-links">
+                <li><a href="#features">기능</a></li>
+                <li><a href="#how-it-works">사용법</a></li>
+                <li><a href="#pricing">가격</a></li>
+                <li><a href="https://naver-real-estate-bot-jftvro8dufrp7z2yf7yh6j.streamlit.app" target="_blank"
+                        class="nav-cta">시작하기</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-container">
+            <div class="hero-content">
+                <span class="hero-badge">🚀 부동산 투자의 새로운 방법</span>
+                <h1>네이버 부동산 가격<br>자동 분석 도구</h1>
+                <p>면적별 최저가, 전세가율, 갭을 자동으로 계산하고<br>저평가 매물을 한눈에 파악하세요.</p>
+                <div class="hero-buttons">
+                    <a href="https://chromewebstore.google.com" class="btn btn-primary" target="_blank">
+                        🧩 Chrome 확장프로그램 설치
+                    </a>
+                    <a href="https://naver-real-estate-bot-jftvro8dufrp7z2yf7yh6j.streamlit.app"
+                        class="btn btn-secondary" target="_blank">
+                        📊 분석 앱 바로가기
+                    </a>
+                </div>
+            </div>
+            <div class="hero-image">
+                <div class="mock-screen">
+                    <div class="mock-header">
+                        <div class="mock-dot red"></div>
+                        <div class="mock-dot yellow"></div>
+                        <div class="mock-dot green"></div>
+                    </div>
+                    <div class="mock-content">
+                        <div class="mock-card">
+                            <div class="mock-title">📍 래미안솔베뉴 59m²</div>
+                            <div class="mock-stats">
+                                <span class="mock-stat sale">매매 12.5억</span>
+                                <span class="mock-stat lease">전세 7.8억</span>
+                                <span class="mock-stat gap">갭 4.7억</span>
+                            </div>
+                        </div>
+                        <div class="mock-card">
+                            <div class="mock-title">📍 고덕자이 84m²</div>
+                            <div class="mock-stats">
+                                <span class="mock-stat sale">매매 15.2억</span>
+                                <span class="mock-stat lease">전세 9.5억</span>
+                                <span class="mock-stat gap">갭 5.7억</span>
+                            </div>
+                        </div>
+                        <div class="mock-card">
+                            <div class="mock-title">📍 힐스테이트 59m² 🟢</div>
+                            <div class="mock-stats">
+                                <span class="mock-stat sale">매매 10.8억</span>
+                                <span class="mock-stat lease">전세 7.2억</span>
+                                <span class="mock-stat gap">갭 3.6억</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features" id="features">
+        <div class="section-container">
+            <div class="section-header">
+                <h2>왜 이 도구를 사용해야 할까요?</h2>
+                <p>복잡한 부동산 데이터를 자동으로 분석하여 투자 결정을 도와드립니다</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>면적별 가격 자동 요약</h3>
+                    <p>59m², 84m² 등 면적별로 최저가, 최고가를 자동으로 분류하고 한눈에 비교할 수 있습니다.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🚦</div>
+                    <h3>저평가 매물 신호등</h3>
+                    <p>동일 면적 내 가격 차이를 분석하여 저평가된 매물을 🟢🟡🔴 신호등으로 표시합니다.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">💰</div>
+                    <h3>갭/전세가율 자동 계산</h3>
+                    <p>매매가 대비 전세가 비율과 갭을 자동으로 계산하여 갭투자 분석을 돕습니다.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">💾</div>
+                    <h3>데이터 저장 & 내보내기</h3>
+                    <p>수집한 데이터를 JSON으로 내보내어 엑셀이나 분석 앱에서 활용할 수 있습니다.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔔</div>
+                    <h3>가격 변동 알림</h3>
+                    <p>관심 단지의 가격이 하락하면 이메일로 알림을 받아 기회를 놓치지 마세요.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📱</div>
+                    <h3>멀티 플랫폼 지원</h3>
+                    <p>Chrome 확장프로그램, Tampermonkey 스크립트, 웹 앱 등 다양한 방식으로 사용 가능합니다.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section class="how-it-works" id="how-it-works">
+        <div class="section-container">
+            <div class="section-header">
+                <h2>간단한 3단계로 시작하세요</h2>
+                <p>복잡한 설정 없이 바로 사용할 수 있습니다</p>
+            </div>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <h3>확장프로그램 설치</h3>
+                    <p>Chrome 웹 스토어에서 "네이버 부동산 분석" 확장프로그램을 설치합니다.</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <h3>네이버 부동산 방문</h3>
+                    <p>관심 있는 아파트 단지 페이지에서 매물 목록을 스크롤합니다.</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <h3>분석 결과 확인</h3>
+                    <p>면적별 시세, 갭, 전세가율이 자동으로 표시됩니다. 저장하여 분석 앱에서 활용하세요.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing -->
+    <section class="pricing" id="pricing">
+        <div class="section-container">
+            <div class="section-header">
+                <h2>합리적인 가격</h2>
+                <p>무료로 시작하고, 필요에 따라 업그레이드하세요</p>
+            </div>
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <div class="pricing-name">무료</div>
+                    <div class="pricing-price">₩0</div>
+                    <div class="pricing-period">영구 무료</div>
+                    <ul class="pricing-features">
+                        <li>면적별 가격 요약</li>
+                        <li>갭/전세가율 자동 계산</li>
+                        <li>JSON 내보내기</li>
+                        <li>관심 단지 3개</li>
+                    </ul>
+                    <a href="https://naver-real-estate-bot-jftvro8dufrp7z2yf7yh6j.streamlit.app"
+                        class="pricing-btn outline" target="_blank">무료로 시작</a>
+                </div>
+                <div class="pricing-card popular">
+                    <div class="pricing-name">프리미엄</div>
+                    <div class="pricing-price">₩9,900</div>
+                    <div class="pricing-period">/월</div>
+                    <ul class="pricing-features">
+                        <li>무료 기능 모두 포함</li>
+                        <li>무제한 관심 단지</li>
+                        <li>가격 변동 이메일 알림</li>
+                        <li>가격 히스토리 분석</li>
+                        <li>우선 고객 지원</li>
+                    </ul>
+                    <button class="pricing-btn primary" onclick="alert('곧 출시 예정입니다!')">곧 출시</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta">
+        <div class="section-container">
+            <h2>지금 바로 시작하세요</h2>
+            <p>복잡한 부동산 분석, 이제 자동으로 해결하세요.<br>무료로 사용해보고 효과를 직접 경험해보세요.</p>
+            <div class="cta-buttons">
+                <a href="https://chromewebstore.google.com" class="btn btn-primary" target="_blank">
+                    🧩 Chrome 확장프로그램 설치
+                </a>
+                <a href="https://greasyfork.org/ko/scripts/563186" class="btn btn-secondary" target="_blank">
+                    🔧 Tampermonkey 스크립트
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-links">
+            <a href="https://github.com/ianian3/naver-real-estate-bot" target="_blank">GitHub</a>
+            <a href="https://greasyfork.org/ko/scripts/563186" target="_blank">Greasy Fork</a>
+            <a href="mailto:support@example.com">문의하기</a>
+        </div>
+        <p class="footer-copyright">© 2026 네이버 부동산 분석 도우미. Made with ❤️</p>
+    </footer>
+
+    <!-- Smooth Scroll -->
+    <script>
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+    </script>
+</body>
+
+</html>
