@@ -1190,3 +1190,59 @@ with tab6:
         st.write(f"**수익률**: 투자금 대비 예상 수익률 {roi:.0f}%" if roi > 0 else "**수익률**: 데이터 입력 필요")
         st.write(f"**원금보존**: {principal_comment if target_sale > 0 else '데이터 입력 필요'}")
         st.write(f"**리스크**: 입주물량 {supply_grade.split(':')[0]}등급, {build_age}년차")
+    
+    # AI 투자 분석 보고서 생성
+    st.divider()
+    st.markdown("### 📄 AI 투자 분석 보고서")
+    
+    if target_sale > 0 and target_lease > 0:
+        if st.button("🤖 AI 분석 보고서 생성", type="primary", use_container_width=True):
+            with st.spinner("AI가 투자 분석 보고서를 작성 중입니다..."):
+                from src.report_generator import generate_investment_report
+                
+                # 분석 데이터 구성
+                analysis_data = {
+                    'target_name': target_name or '대상 단지',
+                    'target_area': target_area,
+                    'target_sale': target_sale,
+                    'target_lease': target_lease,
+                    'scores': scores,
+                    'total_score': total_score,
+                    'grade': grade,
+                    'recommendation': recommendation,
+                    'details': {
+                        'underval_comment': underval_comment,
+                        'liquidity_checks': sum([is_large_complex, is_brand, is_subway, exclude_low, exclude_top, is_south]),
+                        'roi': roi,
+                        'lease_ratio': (target_lease / target_sale * 100) if target_sale > 0 else 0,
+                        'supply_grade': supply_grade,
+                        'build_age': build_age
+                    }
+                }
+                
+                # 보고서 생성
+                report = generate_investment_report(analysis_data)
+                
+                # 세션에 저장
+                st.session_state['generated_report'] = report
+                st.session_state['report_target'] = target_name or '대상단지'
+        
+        # 생성된 보고서 표시
+        if 'generated_report' in st.session_state and st.session_state.get('generated_report'):
+            st.success("✅ 보고서 생성 완료!")
+            
+            # 보고서 미리보기
+            with st.expander("📋 보고서 미리보기", expanded=True):
+                st.markdown(st.session_state['generated_report'])
+            
+            # 다운로드 버튼
+            report_filename = f"투자분석_{st.session_state.get('report_target', '단지')}_{datetime.now().strftime('%Y%m%d')}.md"
+            st.download_button(
+                label="📥 보고서 다운로드 (Markdown)",
+                data=st.session_state['generated_report'],
+                file_name=report_filename,
+                mime="text/markdown",
+                use_container_width=True
+            )
+    else:
+        st.info("💡 보고서를 생성하려면 먼저 매매가와 전세가를 입력하세요.")
