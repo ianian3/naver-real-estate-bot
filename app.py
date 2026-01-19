@@ -403,6 +403,9 @@ if uploaded_file is not None:
             
             st.sidebar.success(f"✅ {complex_name} 가져오기 성공!")
             st.sidebar.info(f"매매 {sale_count}개, 전세 {lease_count}개")
+            
+            # 🆕 가격 히스토리 자동 저장
+            db.save_daily_summary(complex_no)
         
         # 캐시 클리어 및 즉시 새로고침
         st.cache_data.clear()
@@ -576,7 +579,7 @@ with col4:
 st.divider()
 
 # 탭 생성
-tab1, tab2, tab3, tab4 = st.tabs(["📋 매물 리스트", "📊 가격 분석", "🏢 아파트별 통계", "💾 내보내기"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 매물 리스트", "📊 가격 분석", "📈 가격 추이", "🏢 아파트별 통계", "💾 내보내기"])
 
 with tab1:
     st.subheader("📋 매물 목록 (사용자 요청 컬럼)")
@@ -723,6 +726,162 @@ with tab2:
             st.info("투자금 계산을 위해 매매/전세 데이터가 모두 필요합니다.")
 
 with tab3:
+    st.subheader("📈 가격 변동 추이")
+    
+    # 단지 선택
+    all_complexes = filtered_df['아파트명'].unique().tolist()
+    
+    if not all_complexes:
+        st.warning("가격 추이를 확인할 단지가 없습니다.")
+    else:
+        col1, col2, col3 = st.columns([2, 1, 1])
+        
+        with col1:
+            # 단지명 → 단지번호 매핑
+            complex_name_to_no = dict(zip(
+                filtered_df['아파트명'].unique(),
+                filtered_df.groupby('아파트명')['complex_no'].first()
+            ))
+            selected_complex_name = st.selectbox(
+                "🏢 단지 선택",
+                options=all_complexes,
+                key="trend_complex_select"
+            )
+            selected_complex_no = complex_name_to_no.get(selected_complex_name)
+        
+        with col2:
+            # 면적 선택
+            if selected_complex_no:
+                area_types = db.get_area_types(selected_complex_no)
+                if area_types:
+                    area_options = ["전체"] + area_types
+                    selected_area_type = st.selectbox(
+                        "📐 면적 선택",
+                        options=area_options,
+                        key="trend_area_select"
+                    )
+                else:
+                    selected_area_type = "전체"
+                    st.info("면적 데이터 없음")
+            else:
+                selected_area_type = "전체"
+        
+        with col3:
+            # 기간 선택
+            period_options = {"1주": 7, "1개월": 30, "3개월": 90, "6개월": 180, "1년": 365, "전체": 9999}
+            selected_period = st.selectbox(
+                "📅 기간",
+                options=list(period_options.keys()),
+                index=2,  # 기본값: 3개월
+                key="trend_period_select"
+            )
+            days = period_options[selected_period]
+        
+        # 가격 히스토리 조회
+        if selected_complex_no:
+            area_param = None if selected_area_type == "전체" else selected_area_type
+            history_df = db.get_price_history(selected_complex_no, area_param, days=days)
+            
+            if not history_df.empty:
+                # 가격 변동 정보
+                change_info = db.get_price_change(selected_complex_no, area_param, compare_days=min(days, 30))
+                
+                # 메트릭 카드
+                mcol1, mcol2, mcol3, mcol4 = st.columns(4)
+                
+                with mcol1:
+                    if change_info and 'sale_current' in change_info:
+                        sale_display = f"{change_info['sale_current'] / 10000:.1f}억"
+                        sale_delta = f"{change_info.get('sale_change_pct', 0):.1f}%"
+                        st.metric("📊 평균 매매가", sale_display, sale_delta)
+                    else:
+                        st.metric("📊 평균 매매가", "-", "데이터 부족")
+                
+                with mcol2:
+                    if change_info and 'lease_current' in change_info:
+                        lease_display = f"{change_info['lease_current'] / 10000:.1f}억"
+                        lease_delta = f"{change_info.get('lease_change_pct', 0):.1f}%"
+                        st.metric("📊 평균 전세가", lease_display, lease_delta)
+                    else:
+                        st.metric("📊 평균 전세가", "-", "데이터 부족")
+                
+                with mcol3:
+                    if change_info and 'gap_current' in change_info:
+                        gap_display = f"{change_info['gap_current'] / 10000:.1f}억"
+                        gap_delta = f"{change_info.get('gap_change', 0) / 10000:.1f}억"
+                        st.metric("💰 갭 (투자금)", gap_display, gap_delta, delta_color="inverse")
+                    else:
+                        st.metric("💰 갭 (투자금)", "-", "데이터 부족")
+                
+                with mcol4:
+                    latest = history_df.iloc[-1] if not history_df.empty else None
+                    if latest is not None and latest.get('lease_ratio'):
+                        st.metric("📈 전세가율", f"{latest['lease_ratio']:.1f}%", "")
+                    else:
+                        st.metric("📈 전세가율", "-", "")
+                
+                st.divider()
+                
+                # 가격 추이 차트
+                st.markdown("#### 📊 가격 변동 차트")
+                
+                # 데이터 전처리
+                chart_df = history_df.copy()
+                chart_df['매매가(억)'] = chart_df['sale_avg_price'].apply(lambda x: x / 10000 if x else None)
+                chart_df['전세가(억)'] = chart_df['lease_avg_price'].apply(lambda x: x / 10000 if x else None)
+                chart_df['날짜'] = pd.to_datetime(chart_df['record_date'])
+                
+                # 멀티라인 차트
+                fig = px.line(
+                    chart_df,
+                    x='날짜',
+                    y=['매매가(억)', '전세가(억)'],
+                    title=f"{selected_complex_name} 가격 추이 ({selected_period})",
+                    labels={'value': '가격 (억원)', 'variable': '거래유형'},
+                    markers=True
+                )
+                fig.update_layout(
+                    height=400,
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    hovermode='x unified'
+                )
+                fig.update_traces(line=dict(width=2))
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # 면적별 상세 (전체 선택 시)
+                if selected_area_type == "전체" and len(history_df['area_type'].unique()) > 1:
+                    st.markdown("#### 📐 면적별 가격 추이")
+                    
+                    area_chart_df = history_df.copy()
+                    area_chart_df['매매가(억)'] = area_chart_df['sale_avg_price'].apply(lambda x: x / 10000 if x else None)
+                    area_chart_df['날짜'] = pd.to_datetime(area_chart_df['record_date'])
+                    
+                    fig2 = px.line(
+                        area_chart_df,
+                        x='날짜',
+                        y='매매가(억)',
+                        color='area_type',
+                        title=f"{selected_complex_name} 면적별 매매가 추이",
+                        labels={'매매가(억)': '매매가 (억원)', 'area_type': '면적'},
+                        markers=True
+                    )
+                    fig2.update_layout(height=350)
+                    st.plotly_chart(fig2, use_container_width=True)
+                
+                # 히스토리 데이터 테이블
+                with st.expander("📋 상세 데이터 보기"):
+                    display_history = history_df[['record_date', 'area_type', 'sale_avg_price', 'lease_avg_price', 'gap_investment', 'lease_ratio', 'sale_count', 'lease_count']].copy()
+                    display_history.columns = ['날짜', '면적', '매매평균(만원)', '전세평균(만원)', '갭(만원)', '전세가율(%)', '매매수', '전세수']
+                    st.dataframe(display_history, use_container_width=True, hide_index=True)
+            else:
+                st.info("📭 아직 가격 히스토리가 없습니다.")
+                st.write("""
+                **가격 추이 데이터 수집 방법:**
+                1. JSON 파일을 업로드하면 자동으로 당일 가격이 기록됩니다
+                2. 매일 또는 정기적으로 데이터를 업로드하면 시간에 따른 변화를 확인할 수 있습니다
+                """)
+
+with tab4:
     st.subheader("🏢 아파트별 현황")
     
     # 아파트별 통계 테이블
@@ -754,7 +913,7 @@ with tab3:
     fig3.update_layout(height=400)
     st.plotly_chart(fig3, use_container_width=True)
 
-with tab4:
+with tab5:
     st.subheader("💾 데이터 내보내기")
     
     st.write("**사용자 요청 컬럼 형식**으로 CSV 다운로드")
