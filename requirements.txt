@@ -3,6 +3,7 @@ streamlit
 pandas
 plotly
 extra-streamlit-components
+streamlit-cookies-controller
 python-dotenv
 
 # Authentication
