@@ -725,28 +725,247 @@
     <section class="how-it-works" id="how-it-works">
         <div class="section-container">
             <div class="section-header">
-                <h2>간단한 3단계로 시작하세요</h2>
-                <p>복잡한 설정 없이 바로 사용할 수 있습니다</p>
+                <h2>상세 사용 가이드</h2>
+                <p>5단계로 쉽게 시작하는 부동산 분석</p>
             </div>
-            <div class="steps">
-                <div class="step">
+
+            <!-- Step 1 -->
+            <div class="detailed-step">
+                <div class="step-header">
                     <div class="step-number">1</div>
-                    <h3>확장프로그램 설치</h3>
-                    <p>Chrome 웹 스토어에서 "네이버 부동산 분석" 확장프로그램을 설치합니다.</p>
+                    <div class="step-info">
+                        <h3>🧩 Chrome 확장프로그램 설치</h3>
+                        <p class="step-subtitle">1분이면 끝나는 간단 설치</p>
+                    </div>
                 </div>
-                <div class="step">
+                <div class="step-content">
+                    <ul class="step-list">
+                        <li>Chrome 웹 스토어에서 <strong>"네이버 부동산 분석"</strong> 검색</li>
+                        <li>또는 <a href="https://greasyfork.org/ko/scripts/563186" target="_blank">Greasy Fork</a>에서
+                            Tampermonkey 스크립트 설치</li>
+                        <li><strong>"Chrome에 추가"</strong> 버튼 클릭</li>
+                        <li>확장프로그램 아이콘이 브라우저 상단에 표시되면 완료!</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Step 2 -->
+            <div class="detailed-step">
+                <div class="step-header">
                     <div class="step-number">2</div>
-                    <h3>네이버 부동산 방문</h3>
-                    <p>관심 있는 아파트 단지 페이지에서 매물 목록을 스크롤합니다.</p>
+                    <div class="step-info">
+                        <h3>🏠 네이버 부동산 접속</h3>
+                        <p class="step-subtitle">관심 지역의 아파트 찾기</p>
+                    </div>
                 </div>
-                <div class="step">
+                <div class="step-content">
+                    <ul class="step-list">
+                        <li><a href="https://new.land.naver.com" target="_blank">new.land.naver.com</a> 접속</li>
+                        <li>지도에서 관심 지역으로 이동</li>
+                        <li>분석하고 싶은 <strong>아파트 단지</strong> 클릭</li>
+                    </ul>
+                    <div class="step-tip">
+                        💡 <strong>팁:</strong> 관심 지역의 여러 단지를 비교 분석하면 더 정확한 시세 파악이 가능합니다.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3 -->
+            <div class="detailed-step">
+                <div class="step-header">
                     <div class="step-number">3</div>
-                    <h3>분석 결과 확인</h3>
-                    <p>면적별 시세, 갭, 전세가율이 자동으로 표시됩니다. 저장하여 분석 앱에서 활용하세요.</p>
+                    <div class="step-info">
+                        <h3>📜 매물 목록 스크롤</h3>
+                        <p class="step-subtitle">모든 매물 데이터 로드</p>
+                    </div>
+                </div>
+                <div class="step-content">
+                    <ul class="step-list">
+                        <li>단지 상세 페이지에서 <strong>매물 목록</strong>이 표시됩니다</li>
+                        <li>매물 목록을 <strong>끝까지 스크롤</strong>하여 모든 매물을 로드</li>
+                        <li>확장프로그램이 자동으로 면적별 <strong>가격 요약</strong>을 표시합니다</li>
+                        <li>🟢🟡🔴 신호등으로 <strong>저평가 매물</strong>을 한눈에 확인!</li>
+                    </ul>
+                    <div class="step-tip">
+                        💡 <strong>팁:</strong> 매물이 많은 단지일수록 스크롤을 충분히 해주세요. 로드된 매물만 분석됩니다.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 4 -->
+            <div class="detailed-step">
+                <div class="step-header">
+                    <div class="step-number">4</div>
+                    <div class="step-info">
+                        <h3>💾 저장 버튼으로 시세 저장</h3>
+                        <p class="step-subtitle">여러 단지 데이터 수집</p>
+                    </div>
+                </div>
+                <div class="step-content">
+                    <ul class="step-list">
+                        <li>화면 우측 상단의 <strong style="color: #4CAF50;">💾 저장</strong> 버튼 클릭</li>
+                        <li>해당 단지의 시세 데이터가 브라우저에 저장됩니다</li>
+                        <li>다른 단지로 이동하여 같은 방식으로 저장 (무제한)</li>
+                        <li><strong style="color: #9C27B0;">📥 전체 내보내기</strong> 버튼으로 JSON 파일 다운로드</li>
+                    </ul>
+                    <div class="step-buttons-preview">
+                        <span class="preview-btn save">💾 저장 (3)</span>
+                        <span class="preview-btn export">📥 전체 내보내기</span>
+                        <span class="preview-btn clear">🗑️ 초기화</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 5 -->
+            <div class="detailed-step">
+                <div class="step-header">
+                    <div class="step-number">5</div>
+                    <div class="step-info">
+                        <h3>📊 분석 앱에서 데이터 업로드</h3>
+                        <p class="step-subtitle">심층 분석 및 비교</p>
+                    </div>
+                </div>
+                <div class="step-content">
+                    <ul class="step-list">
+                        <li><a href="https://naver-real-estate-bot-jftvro8dufrp7z2yf7yh6j.streamlit.app"
+                                target="_blank">분석 앱</a>에 접속하여 회원가입/로그인</li>
+                        <li>사이드바에서 <strong>JSON 파일 업로드</strong></li>
+                        <li>업로드된 데이터로 <strong>면적별 시세, 갭, 전세가율</strong> 확인</li>
+                        <li>여러 단지를 한 번에 비교 분석!</li>
+                        <li>관심단지 등록으로 가격 변동 알림 받기 (프리미엄)</li>
+                    </ul>
+                    <a href="https://naver-real-estate-bot-jftvro8dufrp7z2yf7yh6j.streamlit.app" class="step-cta"
+                        target="_blank">
+                        🚀 분석 앱 바로가기
+                    </a>
                 </div>
             </div>
         </div>
     </section>
+
+    <style>
+        .detailed-step {
+            background: white;
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        }
+
+        .step-header {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .step-info h3 {
+            font-size: 1.25rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .step-subtitle {
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+
+        .step-content {
+            padding-left: 4rem;
+        }
+
+        .step-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .step-list li {
+            padding: 0.5rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+
+        .step-list li::before {
+            content: '→';
+            position: absolute;
+            left: 0;
+            color: var(--primary);
+        }
+
+        .step-list a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .step-list a:hover {
+            text-decoration: underline;
+        }
+
+        .step-tip {
+            background: linear-gradient(135deg, #FEF3C7, #FDE68A);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .step-buttons-preview {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .preview-btn {
+            padding: 0.75rem 1.25rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        .preview-btn.save {
+            background: linear-gradient(135deg, #4CAF50, #388E3C);
+            color: white;
+        }
+
+        .preview-btn.export {
+            background: linear-gradient(135deg, #9C27B0, #7B1FA2);
+            color: white;
+        }
+
+        .preview-btn.clear {
+            background: #6c757d;
+            color: white;
+        }
+
+        .step-cta {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 600;
+            margin-top: 1rem;
+            transition: all 0.3s;
+        }
+
+        .step-cta:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(79, 70, 229, 0.4);
+        }
+
+        @media (max-width: 768px) {
+            .step-content {
+                padding-left: 0;
+            }
+
+            .step-header {
+                flex-direction: column;
+                text-align: center;
+            }
+        }
+    </style>
 
     <!-- Pricing -->
     <section class="pricing" id="pricing">
